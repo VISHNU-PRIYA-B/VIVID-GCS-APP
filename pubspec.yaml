@@ -1,0 +1,87 @@
+name: vivid_mapping_sandbox
+description: "Multi-Bot GCS Android Application."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core dependencies
+  cupertino_icons: ^1.0.8
+  package_info_plus: ^8.0.0
+  intl: ^0.20.2
+  shared_preferences: ^2.5.5
+
+  # Video streaming (MediaKit)
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  media_kit_libs_video: ^1.0.4
+  media_kit_libs_android_video: ^1.0.4
+
+  # WebRTC
+  flutter_webrtc: ^1.0.0
+  http: ^1.2.1
+  
+  # Network & connectivity
+  connectivity_plus: ^6.0.0
+  
+  # Communication
+  web_socket_channel: ^3.0.3
+  
+  # Charts & visualization
+  fl_chart: ^0.68.0
+  
+  # Icons
+  lucide_icons_flutter: ^3.1.9
+
+  # Theme
+  google_fonts: ^6.2.1
+  
+  # State management
+  provider: ^6.1.2
+  
+  # USB & Serial communication
+  usb_serial: ^0.5.2  # For Android (MK32)
+  flutter_libserialport: ^0.6.0  # For Windows & Ubuntu
+  libserialport: ^0.3.0
+  
+  # Permissions
+  permission_handler: ^11.0.0
+
+  # database
+  isar: ^3.1.0
+  isar_flutter_libs: ^3.1.0
+
+  uuid: ^4.5.3
+  graphql_flutter: ^5.2.1
+  hive_ce: ^2.19.3
+
+  pdf: ^3.10.4
+  path_provider: ^2.1.1
+  open_file: ^3.3.2 # Allows opening the PDF immediately after generation
+  screenshot: ^3.0.0
+  share_plus: ^12.0.2
+  flutter_tts: ^4.2.5
+  video_thumbnail: ^0.5.6
+  ffmpeg_kit_flutter_new: ^4.5.0
+  flutter_foreground_task: ^9.2.2
+  file_picker: ^11.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  isar_generator: ^3.1.0
+  build_runner: ^2.4.13
+  analyzer: ^5.13.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - lib/assets/image.png
+    - lib/assets/bot_image.png
