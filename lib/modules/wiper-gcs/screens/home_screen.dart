@@ -1,0 +1,1105 @@
+// // import 'package:flutter/material.dart';
+
+// // import '../../../core/models/task.dart';
+// // import '../../../ui/app_theme.dart';
+// // import '../../../ui/gcs_widgets.dart';
+// // import '../sections/telemetry.dart';
+// // // Adjust the import path as necessary
+
+// // // ═════════════════════════════════════════════════════════════════════════════
+// // // HOME SCREEN — curated at-a-glance dashboard
+// // // Shows only: Chamber A/B, Thrust 1/2, Impeller 1/2, Brush 1/2, Pump,
+// // // and the cleaning statistics (Water Used, Area Cleaned, Energy Consumed).
+// // // ═════════════════════════════════════════════════════════════════════════════
+// // class HomeScreen extends StatefulWidget {
+// //   final Task? task;
+// //   final WiperTelemetry telemetry;
+
+// //   const HomeScreen({super.key, this.task, required this.telemetry});
+
+// //   @override
+// //   State<HomeScreen> createState() => _HomeScreenState();
+// // }
+
+
+// // class _HomeScreenState extends State<HomeScreen> {
+// //   late final WiperTelemetry _telemetry;
+
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     _telemetry = widget.telemetry;
+// //     // _telemetry.initConnection();
+// //   }
+
+// //   @override
+// //   void dispose() {
+// //     // _telemetry.disposeConnection();
+// //     // _telemetry.dispose();
+// //     super.dispose();
+// //   }
+
+// //   String _formatCompact(int val) {
+// //     String s = val.toString();
+// //     if (s.length > 4) {
+// //       if (val > 9999) return '${val ~/ 1000}k';
+// //       if (val < -999) return '${val ~/ 1000}k';
+// //     }
+// //     return s;
+// //   }
+
+// //   // List<SidebarItem> _sidebarItems(BuildContext ctx) => [];
+// //     // SidebarItem(
+// //     //   icon: Icons.dashboard_rounded,
+// //     //   label: 'Home',
+// //     //   sublabel: 'Live overview',
+// //     //   accent: AppTheme.cyan,
+// //     //   onTap: () {},
+// //     // ),
+// //   //   SidebarItem(
+// //   //     icon: Icons.usb_rounded,
+// //   //     label: 'Link Setup',
+// //   //     sublabel: 'Configure USB UART',
+// //   //     accent: AppTheme.green,
+// //   //     onTap: () async {
+// //   //       await Navigator.push(
+// //   //         ctx,
+// //   //         MaterialPageRoute(builder: (_) => const LinkSetupScreen()),
+// //   //       );
+// //   //     },
+// //   //   ),
+// //   //   SidebarItem(
+// //   //     icon: Icons.arrow_back_rounded,
+// //   //     label: 'Back',
+// //   //     sublabel: 'Return',
+// //   //     onTap: () => Navigator.pop(ctx),
+// //   //   ),
+// //   // ];
+
+// //   Widget _groupBox(String title, Color accent, List<Widget> tiles) {
+// //     return Column(
+// //       crossAxisAlignment: CrossAxisAlignment.start,
+// //       children: [
+// //         GcsSectionLabel(title, color: accent),
+// //         const SizedBox(height: 8),
+// //         Container(
+// //           width: double.infinity,
+// //           padding: const EdgeInsets.all(14),
+// //           decoration: BoxDecoration(
+// //             color: AppTheme.bgCard,
+// //             borderRadius: BorderRadius.circular(10),
+// //             border: Border.all(color: AppTheme.borderDim),
+// //           ),
+// //           child: Wrap(spacing: 20, runSpacing: 16, children: tiles),
+// //         ),
+// //       ],
+// //     );
+// //   }
+
+// // @override
+// // Widget build(BuildContext context) {
+// //   final pad = AppTheme.screenPad(context);
+
+// //   return Scaffold(
+// //     backgroundColor: Colors.black,
+// //     body: AnimatedBuilder(
+// //       animation: _telemetry,
+// //       builder: (context, _) {
+// //         final t = _telemetry;
+
+// //         return SingleChildScrollView(
+// //           padding: EdgeInsets.symmetric(
+// //             horizontal: pad,
+// //             vertical: 16,
+// //           ),
+// //           child: Column(
+// //             crossAxisAlignment: CrossAxisAlignment.start,
+// //             children: [
+// //               Row(
+// //                 mainAxisAlignment: MainAxisAlignment.end,
+// //                 children: [
+// //                   StatusBadge(
+// //                     label: 'LINK: ${t.connectionStatus}',
+// //                     color: t.statusColor,
+// //                   ),
+// //                 ],
+// //               ),
+
+// //               const SizedBox(height: 16,),
+
+// //               _groupBox(
+// //                 'Stabilization',
+// //                 AppTheme.cyan,
+// //                 [
+// //                   InnerTeleTile(
+// //                     label: 'CHAMBER A',
+// //                     value: _formatCompact(t.chamberA),
+// //                     unit: 'HPa',
+// //                     icon: Icons.compress_rounded,
+// //                     color: AppTheme.cyan,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'CHAMBER B',
+// //                     value: _formatCompact(t.chamberB),
+// //                     unit: 'HPa',
+// //                     icon: Icons.compress_rounded,
+// //                     color: AppTheme.cyan,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'THRUST 1',
+// //                     value: _formatCompact(t.thrusterDc1),
+// //                     unit: 'RPM',
+// //                     icon: Icons.cyclone_rounded,
+// //                     color: AppTheme.textMid,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'THRUST 2',
+// //                     value: _formatCompact(t.thrusterDc2),
+// //                     unit: 'RPM',
+// //                     icon: Icons.cyclone_rounded,
+// //                     color: AppTheme.textMid,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'IMPEL 1',
+// //                     value: _formatCompact(t.impellerDc1),
+// //                     unit: 'RPM',
+// //                     icon: Icons.heat_pump,
+// //                     color: AppTheme.textMid,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'IMPEL 2',
+// //                     value: _formatCompact(t.impellerDc2),
+// //                     unit: 'RPM',
+// //                     icon: Icons.heat_pump,
+// //                     color: AppTheme.textMid,
+// //                   ),
+// //                 ],
+// //               ),
+
+// //               const SizedBox(height: 20),
+
+// //               Row(
+// //                 crossAxisAlignment: CrossAxisAlignment.start,
+// //                 children: [
+// //                   Expanded(child:
+
+              
+// //               _groupBox(
+// //                 'Cleaning Subs',
+// //                 AppTheme.green,
+// //                 [
+// //                   InnerStatusTile(
+// //                     label: 'BRUSH 1',
+// //                     status: t.brush1 ? 'RUN' : 'OFF',
+// //                     icon: Icons.change_circle_outlined,
+// //                     color: t.brush1
+// //                         ? AppTheme.cyan
+// //                         : AppTheme.textHi,
+// //                   ),
+// //                   InnerStatusTile(
+// //                     label: 'BRUSH 2',
+// //                     status: t.brush2 ? 'RUN' : 'OFF',
+// //                     icon: Icons.change_circle_outlined,
+// //                     color: t.brush2
+// //                         ? AppTheme.cyan
+// //                         : AppTheme.textHi,
+// //                   ),
+// //                   InnerStatusTile(
+// //                     label: 'WIPER 1',
+// //                     status: t.wiper1 ? 'RUN' : 'OFF',
+// //                     icon: Icons.change_circle_outlined,
+// //                     color: t.wiper1 ? AppTheme.cyan:AppTheme.textHi,
+// //                   ),
+// //                   InnerStatusTile(
+// //                     label: 'WIPER 2',
+// //                     status: t.wiper1 ? 'RUN' : 'OFF',
+// //                     icon: Icons.change_circle_outlined,
+// //                     color: t.wiper2 ? AppTheme.cyan:AppTheme.textHi,
+// //                   ),
+
+// //                   InnerStatusTile(
+// //                     label: 'PUMP',
+// //                     status: t.pump ? 'RUN' : 'OFF',
+// //                     icon: Icons.water_rounded,
+// //                     color: t.pump
+// //                         ? AppTheme.cyan
+// //                         : AppTheme.textHi,
+// //                   ),
+// //                 ],
+// //               ),
+// //                   ),
+
+// //               const SizedBox(width: 20),
+// //               Expanded(child:
+
+
+// //               _groupBox(
+// //                 'Cleaning Statistics',
+// //                 AppTheme.amber,
+// //                 [
+// //                   InnerTeleTile(
+// //                     label: 'WATER USED',
+// //                     value: t.waterUsed.toStringAsFixed(1),
+// //                     unit: 'L',
+// //                     icon: Icons.water_drop_rounded,
+// //                     color: AppTheme.cyan,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'AREA CLEANED',
+// //                     value: t.areaCleaned.toStringAsFixed(1),
+// //                     unit: 'm2',
+// //                     icon: Icons.square_foot_rounded,
+// //                     color: AppTheme.green,
+// //                   ),
+// //                   InnerTeleTile(
+// //                     label: 'ENERGY CONSUMED',
+// //                     value: t.energyConsumed.toStringAsFixed(1),
+// //                     unit: 'kWh',
+// //                     icon: Icons.bolt_rounded,
+// //                     color: AppTheme.amber,
+// //                   ),
+// //                 ],
+// //               ),
+// //               ),
+// //                 ],
+// //               ),
+
+// //               const SizedBox(height: 24),
+// //             ],
+// //           ),
+// //         );
+// //       },
+// //     ),
+// //   );
+// // }
+// // }
+
+
+
+
+// import 'package:flutter/material.dart';
+
+// import '../../../core/models/task.dart';
+// import '../../../ui/app_theme.dart';
+// import '../../../ui/gcs_widgets.dart';
+// import '../sections/telemetry.dart';
+// import 'package:vivid_mapping_sandbox/modules/wiper-gcs/widgets/camera_view.dart';
+// import 'package:vivid_mapping_sandbox/modules/wiper-gcs/screens/wiper_main_screen.dart';
+//  // TODO: adjust to the actual path of camera_view.dart
+
+// // ═════════════════════════════════════════════════════════════════════════════
+// // HOME SCREEN — curated at-a-glance dashboard
+// // Shows only: Live Cameras, Chamber A/B, Thrust 1/2, Impeller 1/2, Brush 1/2,
+// // Pump, and the cleaning statistics (Water Used, Area Cleaned, Energy Consumed).
+// // ═════════════════════════════════════════════════════════════════════════════
+// class HomeScreen extends StatefulWidget {
+//   final Task? task;
+//   final WiperTelemetry telemetry;
+//   final Widget mappingTab;
+ 
+
+//   const HomeScreen({
+//     super.key, 
+//     this.task, 
+//     required this.telemetry,
+//     required this.mappingTab,
+    
+//     });
+
+//   @override
+//   State<HomeScreen> createState() => _HomeScreenState();
+// }
+
+// class _HomeScreenState extends State<HomeScreen> {
+//   late final WiperTelemetry _telemetry;
+//   bool _showCamB = false;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _telemetry = widget.telemetry;
+//     // _telemetry.initConnection();
+//   }
+
+//   @override
+//   void dispose() {
+//     // _telemetry.disposeConnection();
+//     // _telemetry.dispose();
+//     super.dispose();
+//   }
+
+//   String _formatCompact(int val) {
+//     String s = val.toString();
+//     if (s.length > 4) {
+//       if (val > 9999) return '${val ~/ 1000}k';
+//       if (val < -999) return '${val ~/ 1000}k';
+//     }
+//     return s;
+//   }
+
+//   // Widget _groupBox(String title, Color accent, List<Widget> tiles) {
+//   //   return Column(
+//   //     crossAxisAlignment: CrossAxisAlignment.start,
+//   //     children: [
+//   //       GcsSectionLabel(title, color: accent),
+//   //       const SizedBox(height: 8),
+//   //       Container(
+//   //         width: double.infinity,
+//   //         padding: const EdgeInsets.all(14),
+//   //         decoration: BoxDecoration(
+//   //           color: AppTheme.bgCard,
+//   //           borderRadius: BorderRadius.circular(10),
+//   //           border: Border.all(color: AppTheme.borderDim),
+//   //         ),
+//   //         child: Wrap(spacing: 20, runSpacing: 16, children: tiles),
+//   //       ),
+//   //     ],
+//   //   );
+//   // }
+
+//   Widget _groupBox(
+//   String title,
+//   Color accent,
+//   List<Widget> tiles, {
+//   bool singleLine = false,
+// }) {
+//   return Column(
+//     crossAxisAlignment: CrossAxisAlignment.start,
+//     children: [
+//       GcsSectionLabel(title, color: accent),
+//       const SizedBox(height: 8),
+//       Container(
+//         width: double.infinity,
+//         padding: const EdgeInsets.all(14),
+//         decoration: BoxDecoration(
+//           color: AppTheme.bgCard,
+//           borderRadius: BorderRadius.circular(10),
+//           border: Border.all(color: AppTheme.borderDim),
+//         ),
+//         child: singleLine
+//             ? FittedBox(
+//                 fit: BoxFit.scaleDown,
+//                 alignment: Alignment.centerLeft,
+//                 child: Row(
+//                   mainAxisSize: MainAxisSize.min,
+//                   children: [
+//                     for (int i = 0; i < tiles.length; i++) ...[
+//                       if (i > 0) const SizedBox(width: 20),
+//                       tiles[i],
+//                     ],
+//                   ],
+//                 ),
+//               )
+//             : Wrap(spacing: 20, runSpacing: 16, children: tiles),
+//       ),
+//     ],
+//   );
+// }
+
+//   //  Live camera feed(s) 
+
+//   // Widget _liveCameras(BuildContext context) {
+//   //   final taskName = widget.task?.buildingName ?? 'Untitled Task';
+//   //   final camALink = widget.task?.cameraALink ?? '';
+//   //   // final camBLink = widget.task?.cameraBLink ?? '';
+
+//   //   return Column(
+//   //     crossAxisAlignment: CrossAxisAlignment.start,
+//   //     children: [
+//   //       GcsSectionLabel('Live Feed', color: AppTheme.cyan),
+//   //       const SizedBox(height: 8,width: 50,),
+//   //       LayoutBuilder(
+//   //         builder: (context, constraints) {
+//   //           final isWide = constraints.maxWidth >= 100;
+//   //           final cam1 = CameraView(
+//   //             url: camALink,
+//   //             label: 'Camera A',
+//   //             taskName: taskName,
+//   //             faceNumber: 1,
+              
+//   //           );
+//   //            final mapBox = Container(
+
+//   //               decoration: BoxDecoration(
+//   //                 color: AppTheme.bgCard,
+//   //                 borderRadius: BorderRadius.circular(10),
+//   //                 border: Border.all(color: AppTheme.borderDim),
+//   //               ),
+//   //               clipBehavior: Clip.antiAlias,
+//   //               child: widget.mappingTab,
+//   //             );
+
+//   //             return Column(
+//   //               crossAxisAlignment: CrossAxisAlignment.start,
+//   //               children: [
+//   //                 GcsSectionLabel('Live Feed', color: AppTheme.cyan),
+//   //                 const SizedBox(height: 8),
+//   //                 LayoutBuilder(
+//   //                   builder: (context, constraints) {
+//   //                     final isWide = constraints.maxWidth >= 900;
+
+//   //                       if (isWide) {
+//   //                         return Row(
+//   //                           crossAxisAlignment: CrossAxisAlignment.end,
+//   //                           children: [
+//   //                             const SizedBox(width: 16),
+//   //                             SizedBox(
+//   //                               width: 500,
+                              
+//   //                             child: cam1,)
+                              
+//   //                             // Expanded(child: cam2),
+//   //                           ],
+//   //                         );
+//   //                       }
+//   //                       return Column(
+//   //                         children: [
+//   //                           cam1,
+//   //                           // const SizedBox(height: 16),
+//   //                           // cam2,
+//   //                         ],
+//   //                       );
+//   //                     },
+//   //                   ),
+//   //                 ],
+//   //               );
+//   //             }
+
+//   Widget _liveCameras(BuildContext context) {
+//   final taskName = widget.task?.buildingName ?? 'Untitled Task';
+//   final camALink = widget.task?.cameraALink ?? '';
+//   final camBLink = widget.task?.cameraBLink ?? '';
+
+//   final activeLabel = _showCamB ? 'Camera B' : 'Camera A';
+//   final activeLink  = _showCamB ? camBLink   : camALink;
+
+//   // Key forces CameraView to rebuild (and reconnect) when you swap
+//   final cam = CameraView(
+//     key: ValueKey(activeLabel),
+//     url: activeLink,
+//     label: activeLabel,
+//     taskName: taskName,
+//     faceNumber: _showCamB ? 2 : 1,
+//   );
+
+//   // final mapBox = Container(
+//   //   decoration: BoxDecoration(
+//   //     color: AppTheme.bgCard,
+//   //     borderRadius: BorderRadius.circular(10),
+//   //     border: Border.all(color: AppTheme.borderDim),
+//   //   ),
+//   //   clipBehavior: Clip.antiAlias,
+//   //   child: widget.mappingTab,
+//   // );
+//   final mapBox = Container(
+//   decoration: BoxDecoration(
+//     color: AppTheme.bgCard,
+//     borderRadius: BorderRadius.circular(10),
+//     border: Border.all(color: AppTheme.borderDim),
+//   ),
+//   clipBehavior: Clip.antiAlias,
+//   child: MediaQuery(
+//     data: MediaQuery.of(context).copyWith(
+//       textScaler: const TextScaler.linear(0.6), 
+//     ),
+//     child: widget.mappingTab,
+//   ),
+// );
+
+//   return Column(
+//     crossAxisAlignment: CrossAxisAlignment.start,
+//     children: [
+//       GcsSectionLabel('Live Feed', color: AppTheme.cyan),
+//       const SizedBox(height: 8),
+//       SizedBox(
+//         height: 360,
+//         child: Row(
+//           children: [
+//             SizedBox(
+//               width: 230,
+//               height: 230,
+//               child: Column(
+//                 crossAxisAlignment: CrossAxisAlignment.stretch,
+//                 children: [
+//                   // ── Swap button ──
+//                   OutlinedButton.icon(
+//                     onPressed: camBLink.isEmpty && !_showCamB
+//                         ? null // no Camera B link configured
+//                         : () => setState(() => _showCamB = !_showCamB),
+//                     icon: const Icon(Icons.cameraswitch_rounded, size: 18),
+//                     label: Text(_showCamB
+//                         ? 'Showing B  •  Switch to A'
+//                         : 'Showing A  •  Switch to B'),
+//                     style: OutlinedButton.styleFrom(
+//                       foregroundColor: AppTheme.cyan,
+//                       side: BorderSide(color: AppTheme.cyan.withOpacity(0.5)),
+//                     ),
+//                   ),
+//                   const SizedBox(height: 8),
+//                   Expanded(child: cam),
+//                 ],
+//               ),
+//             ),
+//             const SizedBox(width: 50),
+//             Expanded(child: mapBox),
+//           ],
+//         ),
+//       ),
+//     ],
+//   );
+// }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final pad = AppTheme.screenPad(context);
+
+//     return Scaffold(
+//       backgroundColor: Colors.black,
+//       body: AnimatedBuilder(
+//         animation: _telemetry,
+//         builder: (context, _) {
+//           final t = _telemetry;
+
+//           return SingleChildScrollView(
+//             // padding: EdgeInsets.symmetric(
+//             //   horizontal: pad,
+//             //   vertical: 16,
+//             // ),
+//             padding: EdgeInsets.only(
+//                 left: 8,
+//                 right: pad,
+//                 top: 16,
+//                 bottom: 16,
+//               ),
+            
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Row(
+//                   mainAxisAlignment: MainAxisAlignment.end,
+//                   children: [
+//                     StatusBadge(
+//                       label: 'LINK: ${t.connectionStatus}',
+//                       color: t.statusColor,
+//                     ),
+//                   ],
+//                 ),
+
+//                 const SizedBox(height: 16),
+//                 _groupBox(
+//                   'Stabilization',
+//                   AppTheme.cyan,
+//                   [
+//                     InnerTeleTile(
+//                       label: 'CHAMBER A',
+//                       value: _formatCompact(t.chamberA),
+//                       unit: 'HPa',
+//                       icon: Icons.compress_rounded,
+//                       color: AppTheme.cyan,
+//                     ),
+//                     InnerTeleTile(
+//                       label: 'CHAMBER B',
+//                       value: _formatCompact(t.chamberB),
+//                       unit: 'HPa',
+//                       icon: Icons.compress_rounded,
+//                       color: AppTheme.cyan,
+//                     ),
+//                     InnerTeleTile(
+//                       label: 'THRUST 1',
+//                       value: _formatCompact(t.thrusterDc1),
+//                       unit: 'RPM',
+//                       icon: Icons.cyclone_rounded,
+//                       color: AppTheme.textMid,
+//                     ),
+//                     InnerTeleTile(
+//                       label: 'THRUST 2',
+//                       value: _formatCompact(t.thrusterDc2),
+//                       unit: 'RPM',
+//                       icon: Icons.cyclone_rounded,
+//                       color: AppTheme.textMid,
+//                     ),
+//                     InnerTeleTile(
+//                       label: 'IMPEL 1',
+//                       value: _formatCompact(t.impellerDc1),
+//                       unit: 'RPM',
+//                       icon: Icons.heat_pump,
+//                       color: AppTheme.textMid,
+//                     ),
+//                     InnerTeleTile(
+//                       label: 'IMPEL 2',
+//                       value: _formatCompact(t.impellerDc2),
+//                       unit: 'RPM',
+//                       icon: Icons.heat_pump,
+//                       color: AppTheme.textMid,
+//                     ),
+//                   ],
+//                 ),
+
+//                 const SizedBox(height: 20),
+
+//                 // ── Cleaning Subs (left) + Cleaning Statistics (right) ──
+//                 Row(
+//                   crossAxisAlignment: CrossAxisAlignment.start,
+//                   children: [
+//                     Expanded(
+//                       child: _groupBox(
+//                         'Cleaning Subs',
+//                         AppTheme.green,
+//                         singleLine: true,
+//                         [
+//                           InnerStatusTile(
+//                             label: 'BRUSH 1',
+//                             status: t.brush1 ? 'RUN' : 'OFF',
+//                             icon: Icons.change_circle_outlined,
+//                             color: t.brush1 ? AppTheme.cyan : AppTheme.textHi,
+//                           ),
+//                           InnerStatusTile(
+//                             label: 'BRUSH 2',
+//                             status: t.brush2 ? 'RUN' : 'OFF',
+//                             icon: Icons.change_circle_outlined,
+//                             color: t.brush2 ? AppTheme.cyan : AppTheme.textHi,
+//                           ),
+//                           InnerStatusTile(
+//                             label: 'WIPER 1',
+//                             status: t.wiper1 ? 'RUN' : 'OFF',
+//                             icon: Icons.change_circle_outlined,
+//                             color: t.wiper1 ? AppTheme.cyan : AppTheme.textHi,
+//                           ),
+//                           InnerStatusTile(
+//                             label: 'WIPER 2',
+//                             status: t.wiper2 ? 'RUN' : 'OFF',
+//                             icon: Icons.change_circle_outlined,
+//                             color: t.wiper2 ? AppTheme.cyan : AppTheme.textHi,
+//                           ),
+//                           InnerStatusTile(
+//                             label: 'PUMP',
+//                             status: t.pump ? 'RUN' : 'OFF',
+//                             icon: Icons.water_rounded,
+//                             color: t.pump ? AppTheme.cyan : AppTheme.textHi,
+//                           ),
+//                         ],
+//                       ),
+//                     ),
+//                     const SizedBox(width: 20),
+//                     Expanded(
+//                       child: _groupBox(
+//                         'Cleaning Statistics',
+//                         AppTheme.amber,
+//                         singleLine: true,
+//                         [
+//                           InnerTeleTile(
+//                             label: 'WATER USED',
+//                             value: t.waterUsed.toStringAsFixed(1),
+//                             unit: 'L',
+//                             icon: Icons.water_drop_rounded,
+//                             color: AppTheme.cyan,
+//                           ),
+//                           InnerTeleTile(
+//                             label: 'AREA CLEANED',
+//                             value: t.areaCleaned.toStringAsFixed(1),
+//                             unit: 'm2',
+//                             icon: Icons.square_foot_rounded,
+//                             color: AppTheme.green,
+//                           ),
+//                           InnerTeleTile(
+//                             label: 'ENERGY CONSUMED',
+//                             value: t.energyConsumed.toStringAsFixed(1),
+//                             unit: 'kWh',
+//                             icon: Icons.bolt_rounded,
+//                             color: AppTheme.amber,
+//                           ),
+//                         ],
+//                       ),
+//                     ),
+//                   ],
+//                 ),
+
+//                 const SizedBox(height: 20),
+//                 _liveCameras(context),
+
+//                 const SizedBox(height: 24),
+//               ],
+//             ),
+//           );
+//         },
+//       ),
+//     );
+//   }
+  
+// }
+
+
+
+import 'package:flutter/material.dart';
+
+import '../../../core/models/task.dart';
+import '../../../ui/app_theme.dart';
+import '../../../ui/gcs_widgets.dart';
+import '../sections/telemetry.dart';
+import 'package:vivid_mapping_sandbox/modules/wiper-gcs/widgets/camera_view.dart';
+import 'package:vivid_mapping_sandbox/modules/wiper-gcs/screens/wiper_main_screen.dart';
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HOME SCREEN — curated at-a-glance dashboard
+// Shows only: Live Cameras, Chamber A/B, Thrust 1/2, Impeller 1/2, Brush 1/2,
+// Pump, and the cleaning statistics (Water Used, Area Cleaned, Energy Consumed).
+// ═════════════════════════════════════════════════════════════════════════════
+class HomeScreen extends StatefulWidget {
+  final Task? task;
+  final WiperTelemetry telemetry;
+  final Widget mappingTab;
+  final bool active;
+
+  const HomeScreen({
+    super.key,
+    this.task,
+    required this.telemetry,
+    required this.mappingTab,
+    this.active = true,
+  });
+  // home screen video
+  
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final WiperTelemetry _telemetry;
+  bool _showCamB = false;
+
+  // ── Live Feed sizing (tweak these) ──────────────────────────────────────
+  static const double _feedHeight = 200; // height of BOTH camera + map boxes
+  static const double _camBoxWidth = 260; // width of the camera box
+  static const double _mapDesignWidth = 900; // size the map was designed for
+  static const double _mapDesignHeight = 500;
+
+  @override
+  void initState() {
+    super.initState();
+    _telemetry = widget.telemetry;
+    // _telemetry.initConnection();
+  }
+
+  @override
+  void dispose() {
+    // _telemetry.disposeConnection();
+    // _telemetry.dispose();
+    super.dispose();
+  }
+
+  String _formatCompact(int val) {
+    String s = val.toString();
+    if (s.length > 4) {
+      if (val > 9999) return '${val ~/ 1000}k';
+      if (val < -999) return '${val ~/ 1000}k';
+    }
+    return s;
+  }
+
+  Widget _groupBox(
+    String title,
+    Color accent,
+    List<Widget> tiles, {
+    bool singleLine = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GcsSectionLabel(title, color: accent),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.borderDim),
+          ),
+          child: singleLine
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < tiles.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 20),
+                        tiles[i],
+                      ],
+                    ],
+                  ),
+                )
+              : Wrap(spacing: 20, runSpacing: 16, children: tiles),
+        ),
+      ],
+    );
+  }
+
+  // ── Live camera feed + map ──────────────────────────────────────────────
+  Widget _liveCameras(BuildContext context) {
+    final taskName = widget.task?.buildingName ?? 'Untitled Task';
+    final camALink = widget.task?.cameraALink ?? '';
+    final camBLink = widget.task?.cameraBLink ?? '';
+
+    final activeLabel = _showCamB ? 'Camera B' : 'Camera A';
+    final activeLink = _showCamB ? camBLink : camALink;
+
+    // Key forces CameraView to rebuild (and reconnect) when you swap
+    final cam = CameraView(
+      key: ValueKey(activeLabel),
+      url: activeLink,
+      label: activeLabel,
+      taskName: taskName,
+      faceNumber: _showCamB ? 2 : 1,
+      // home screen video
+      visible: widget.active,
+      
+      // showRecordButton: false,
+    );
+
+    // Camera box — same outline style as the map box
+    final camBox = Container(
+  padding: const EdgeInsets.all(8),
+  decoration: BoxDecoration(
+    color: AppTheme.bgCard,
+    borderRadius: BorderRadius.circular(10),
+    border: Border.all(color: AppTheme.borderDim),
+  ),
+  clipBehavior: Clip.antiAlias,
+  child: Stack(
+    children: [
+      Positioned.fill(child: cam),
+
+      // Next / switch camera button
+      Positioned(
+        bottom: 8,
+        right: 8,
+        child: Material(
+          color: Colors.black.withOpacity(0.45),
+          shape: const CircleBorder(),
+          child: IconButton(
+            tooltip: _showCamB ? 'Switch to Camera A' : 'Switch to Camera B',
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
+            color: AppTheme.cyan,
+            icon: const Icon(Icons.navigate_next_rounded),
+            onPressed: camBLink.isEmpty && !_showCamB
+                ? null // no Camera B link configured
+                : () => setState(() => _showCamB = !_showCamB),
+          ),
+        ),
+      ),
+    ],
+  ),
+);
+
+    // Map box — content is scaled down so nothing gets clipped
+  final mapBox = Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: AppTheme.bgCard,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppTheme.borderDim),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(0.6), 
+      ),
+    child: widget.mappingTab,
+    ),
+  );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GcsSectionLabel('Live Feed', color: AppTheme.cyan),
+        const SizedBox(height: 5),
+        SizedBox(
+          height: _feedHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: _camBoxWidth, child: camBox),
+              const SizedBox(width: 6),
+              Expanded(child: mapBox),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pad = AppTheme.screenPad(context);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: AnimatedBuilder(
+        animation: _telemetry,
+        builder: (context, _) {
+          final t = _telemetry;
+
+          return SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 8,
+              right: pad,
+              top: 8,
+              bottom: 8,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    StatusBadge(
+                      label: 'LINK: ${t.connectionStatus}',
+                      color: t.statusColor,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 5),
+                _groupBox(
+                  'Stabilization',
+                  AppTheme.cyan,
+                  [
+                    InnerTeleTile(
+                      label: 'CHAMBER A',
+                      value: _formatCompact(t.chamberA),
+                      unit: 'HPa',
+                      icon: Icons.compress_rounded,
+                      color: AppTheme.cyan,
+                    ),
+                    InnerTeleTile(
+                      label: 'CHAMBER B',
+                      value: _formatCompact(t.chamberB),
+                      unit: 'HPa',
+                      icon: Icons.compress_rounded,
+                      color: AppTheme.cyan,
+                    ),
+                    InnerTeleTile(
+                      label: 'THRUST 1',
+                      value: _formatCompact(t.thrusterDc1),
+                      unit: 'RPM',
+                      icon: Icons.cyclone_rounded,
+                      color: AppTheme.textMid,
+                    ),
+                    InnerTeleTile(
+                      label: 'THRUST 2',
+                      value: _formatCompact(t.thrusterDc2),
+                      unit: 'RPM',
+                      icon: Icons.cyclone_rounded,
+                      color: AppTheme.textMid,
+                    ),
+                    InnerTeleTile(
+                      label: 'IMPEL 1',
+                      value: _formatCompact(t.impellerDc1),
+                      unit: 'RPM',
+                      icon: Icons.heat_pump,
+                      color: AppTheme.textMid,
+                    ),
+                    InnerTeleTile(
+                      label: 'IMPEL 2',
+                      value: _formatCompact(t.impellerDc2),
+                      unit: 'RPM',
+                      icon: Icons.heat_pump,
+                      color: AppTheme.textMid,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                // ── Cleaning Subs (left) + Cleaning Statistics (right) ──
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _groupBox(
+                        'Cleaning Subs',
+                        AppTheme.green,
+                        singleLine: true,
+                        [
+                          InnerStatusTile(
+                            label: 'BRUSH 1',
+                            status: t.brush1 ? 'RUN' : 'OFF',
+                            icon: Icons.change_circle_outlined,
+                            color: t.brush1 ? AppTheme.cyan : AppTheme.textHi,
+                          ),
+                          InnerStatusTile(
+                            label: 'BRUSH 2',
+                            status: t.brush2 ? 'RUN' : 'OFF',
+                            icon: Icons.change_circle_outlined,
+                            color: t.brush2 ? AppTheme.cyan : AppTheme.textHi,
+                          ),
+                          InnerStatusTile(
+                            label: 'WIPER 1',
+                            status: t.wiper1 ? 'RUN' : 'OFF',
+                            icon: Icons.change_circle_outlined,
+                            color: t.wiper1 ? AppTheme.cyan : AppTheme.textHi,
+                          ),
+                          InnerStatusTile(
+                            label: 'WIPER 2',
+                            status: t.wiper2 ? 'RUN' : 'OFF',
+                            icon: Icons.change_circle_outlined,
+                            color: t.wiper2 ? AppTheme.cyan : AppTheme.textHi,
+                          ),
+                          InnerStatusTile(
+                            label: 'PUMP',
+                            status: t.pump ? 'RUN' : 'OFF',
+                            icon: Icons.water_rounded,
+                            color: t.pump ? AppTheme.cyan : AppTheme.textHi,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: _groupBox(
+                        'Cleaning Statistics',
+                        AppTheme.amber,
+                        singleLine: true,
+                        [
+                          InnerTeleTile(
+                            label: 'WATER USED',
+                            value: t.waterUsed.toStringAsFixed(1),
+                            unit: 'L',
+                            icon: Icons.water_drop_rounded,
+                            color: AppTheme.cyan,
+                          ),
+                          InnerTeleTile(
+                            label: 'AREA CLEANED',
+                            value: t.areaCleaned.toStringAsFixed(1),
+                            unit: 'm2',
+                            icon: Icons.square_foot_rounded,
+                            color: AppTheme.green,
+                          ),
+                          InnerTeleTile(
+                            label: 'ENERGY CONSUMED',
+                            value: t.energyConsumed.toStringAsFixed(1),
+                            unit: 'kWh',
+                            icon: Icons.bolt_rounded,
+                            color: AppTheme.amber,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+                _liveCameras(context),
+
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

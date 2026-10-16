@@ -752,28 +752,28 @@ class TelemetrySection extends StatelessWidget {
               InnerTeleTile(
                 label: 'THRUST 1',
                 value: _formatCompact(t.thrusterDc1),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.cyclone_rounded,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'THRUST 2',
                 value: _formatCompact(t.thrusterDc2),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.cyclone_rounded,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'IMPEL 1',
                 value: _formatCompact(t.impellerDc1),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.heat_pump,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'IMPEL 2',
                 value: _formatCompact(t.impellerDc2),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.heat_pump,
                 color: AppTheme.textMid,
               ),
@@ -880,15 +880,15 @@ class TelemetrySection extends StatelessWidget {
               ),
               InnerStatusTile(
                 label: 'WIPER 1',
-                status: t.wiper1 ? 'ENG' : 'OFF',
-                icon: Icons.cleaning_services_rounded,
-                color: t.wiper1 ? AppTheme.green : AppTheme.textHi,
+                status: t.wiper1 ? 'RUN' : 'OFF',
+                icon: Icons.change_circle_outlined,
+                color: t.wiper1 ? AppTheme.cyan : AppTheme.textHi,
               ),
               InnerStatusTile(
                 label: 'WIPER 2',
-                status: t.wiper2 ? 'ENG' : 'OFF',
-                icon: Icons.cleaning_services_rounded,
-                color: t.wiper2 ? AppTheme.green : AppTheme.textHi,
+                status: t.wiper2 ? 'RUN' : 'OFF',
+                icon: Icons.change_circle_outlined,
+                color: t.wiper2 ? AppTheme.cyan : AppTheme.textHi,
               ),
               InnerStatusTile(
                 label: 'PUMP',
@@ -896,12 +896,56 @@ class TelemetrySection extends StatelessWidget {
                 icon: Icons.water_rounded,
                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
               ),
-              InnerTeleTile(
+              
+              InnerStatusTile(
                 label: 'WATER LVL',
-                value: t.waterLvl.toStringAsFixed(0),
-                unit: '%',
+                status: '${t.waterLvl.toStringAsFixed(1)} L',
                 icon: Icons.water_drop_rounded,
-                color: t.waterLvl < 20 ? AppTheme.red : AppTheme.cyan,
+                color: t.waterLvl < 5.0 ? AppTheme.red : AppTheme.cyan,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatisticsGroup(WiperTelemetry t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildGroupHeader(
+          'Cleaning Statistics',
+          t.isConnected,
+          null,
+          null,
+          null,
+        ),
+        _buildGroupBox(
+          Wrap(
+            spacing: 20,
+            runSpacing: 10,
+            children: [
+              InnerTeleTile(
+                label: 'WATER USED',
+                value: t.waterUsed.toStringAsFixed(1),
+                unit: 'L',
+                icon: Icons.water_drop_rounded,
+                color: AppTheme.cyan,
+              ),
+              InnerTeleTile(
+                label: 'AREA CLEANED',
+                value: t.areaCleaned.toStringAsFixed(1),
+                unit: 'm2',
+                icon: Icons.square_foot_rounded,
+                color: AppTheme.green,
+              ),
+              InnerTeleTile(
+                label: 'ENERGY CONSUMED',
+                value: t.energyConsumed.toStringAsFixed(1),
+                unit: 'kWh',
+                icon: Icons.bolt_rounded,
+                color: AppTheme.amber,
               ),
             ],
           ),

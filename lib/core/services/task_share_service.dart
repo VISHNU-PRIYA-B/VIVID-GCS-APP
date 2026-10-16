@@ -11,6 +11,7 @@ import '../models/task.dart';
 import '../utils/device_id.dart'; 
 import '../../../ui/app_theme.dart';
 
+
 class TaskShareService {
   static const int p2pPort = 8989;
   static HttpServer? _server;
@@ -141,6 +142,22 @@ class TaskShareService {
     }
   }
 
+  // @override
+  
+  //   void initState() {
+  //     super.initState();
+
+  //     const AssetImage('lib/assets/bot_image.png')
+  //         .resolve(const ImageConfiguration())
+  //         .addListener(
+  //       ImageStreamListener((ImageInfo info, bool _) {
+  //         if (mounted) {
+  //           setState(() => _botImage = info);
+  //         }
+  //       }),
+  //     );
+  //   }
+
   // ── 5. METHOD B: DIRECT LOCAL WI-FI / HOTSPOT P2P SERVER ──
   static Future<void> startP2PReceiver(BuildContext context, VoidCallback onImportSuccess) async {
     await stopP2PReceiver();
@@ -262,6 +279,7 @@ class TaskShareService {
       }
     }
   }
+
 
   static Future<void> stopP2PReceiver() async {
     await _server?.close(force: true);
