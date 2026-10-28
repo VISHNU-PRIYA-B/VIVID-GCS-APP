@@ -7270,6 +7270,10 @@ class CameraView extends StatefulWidget {
   final Function(String, DateTime, String, bool, String)? onSnapshot;
   final Function(String, DateTime, String)? onVideoRecorded;
   final bool visible;
+  // record btn
+  final bool showControls;
+    
+  // final bool recordBtn;
 
   const CameraView({
     super.key,
@@ -7281,6 +7285,8 @@ class CameraView extends StatefulWidget {
     this.onVideoRecorded,
     // home screen video
     this.visible = true,
+    // record btn
+    this.showControls = true,
 
   });
 
@@ -7485,6 +7491,9 @@ void didUpdateWidget(covariant CameraView old) {
   // ─────────────────────────────── Recording ───────────────────────────────
 
   Future<void> _startOrResumeRecording({VoidCallback? updateDialog}) async {
+    // record btn
+    // final bool showRecordBtn;
+    
     final s = session;
     if (s.isRecording && !s.isPaused) return;
 
@@ -7561,7 +7570,8 @@ void didUpdateWidget(covariant CameraView old) {
       '-y',
       '-timeout', '10000000',
       '-rtsp_transport', 'tcp',
-      '-fflags', '+genpts+discardcorrupt',
+      // '-fflags', '+genpts+discardcorrupt',
+      '-fflags', '+genpts+discardcorrupt+nobuffer',
       '-flags', 'low_delay',
       '-probesize', '32768',
       '-analyzeduration', '0',
@@ -7574,6 +7584,8 @@ void didUpdateWidget(covariant CameraView old) {
       '-mpegts_flags', '+resend_headers',
       '-pat_period', '0.1',
       '-flush_packets', '1',
+      '-muxdelay', '0',
+      '-muxpreload', '0',
       _relayOutUrl,
 
       // Output 2: file
@@ -7654,13 +7666,16 @@ void didUpdateWidget(covariant CameraView old) {
     },
   );
 
-  relayReady.future
-      .timeout(const Duration(seconds: 6), onTimeout: () {})
-      .then((_) {
-    if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
-  }
+  // relayReady.future
+  //     .timeout(const Duration(seconds: 6), onTimeout: () {})
+  //     .then((_) {
+  //   if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
+  // }
       
-      );
+  //     );
+  Future.delayed(const Duration(milliseconds: 300), () {
+        if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
+      });
     } catch (e) {
       debugPrint("FATAL DART ERROR: $e");
     }
@@ -8023,6 +8038,8 @@ void didUpdateWidget(covariant CameraView old) {
                         ],
                       ),
                     ),
+                    // home screen record
+                    if( widget.showControls)
                     Positioned(
                       bottom: 30,
                       right: 30,
@@ -8142,7 +8159,9 @@ void didUpdateWidget(covariant CameraView old) {
                 ],
               ),
             ),
-            if (hasUrl)
+            // if (hasUrl)
+            // home screen record
+            if (hasUrl && widget.showControls)
               Positioned(
                 top: 10,
                 right: 10,
@@ -8160,8 +8179,8 @@ void didUpdateWidget(covariant CameraView old) {
                         ),
                         child: _isTakingSnap
                             ? const SizedBox(
-                                width: 16,
-                                height: 16,
+                                width: 10,
+                                height: 18,
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 16),
