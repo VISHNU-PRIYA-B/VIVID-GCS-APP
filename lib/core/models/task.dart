@@ -111,11 +111,14 @@ class Task {
   String cameraBLink = '';
   String telemetryPort = '';
 
+
   bool isSynced = false;
 
   DateTime createdAt = DateTime.now();
   DateTime updatedAt = DateTime.now();
   bool isDeleted = false;
+  // archive btn
+  bool isArchive = false;
 
   late String deviceId;
 

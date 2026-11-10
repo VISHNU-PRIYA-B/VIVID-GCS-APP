@@ -90,76 +90,81 @@ const TaskSchema = CollectionSchema(
       type: IsarType.objectList,
       target: r'HistoryPointer',
     ),
-    r'isDeleted': PropertySchema(
+    r'isArchive': PropertySchema(
       id: 14,
+      name: r'isArchive',
+      type: IsarType.bool,
+    ),
+    r'isDeleted': PropertySchema(
+      id: 15,
       name: r'isDeleted',
       type: IsarType.bool,
     ),
     r'isSynced': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'isSynced',
       type: IsarType.bool,
     ),
     r'mappingState': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'mappingState',
       type: IsarType.string,
     ),
     r'numberOfFaces': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'numberOfFaces',
       type: IsarType.long,
     ),
     r'sessionDate': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'sessionDate',
       type: IsarType.dateTime,
     ),
     r'snapshots': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'snapshots',
       type: IsarType.objectList,
       target: r'TaskSnapshot',
     ),
     r'status': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'status',
       type: IsarType.string,
     ),
     r'surfaceArea': PropertySchema(
-      id: 21,
+      id: 22,
       name: r'surfaceArea',
       type: IsarType.double,
     ),
     r'telemetryPort': PropertySchema(
-      id: 22,
+      id: 23,
       name: r'telemetryPort',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 23,
+      id: 24,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'videos': PropertySchema(
-      id: 24,
+      id: 25,
       name: r'videos',
       type: IsarType.objectList,
       target: r'TaskVideo',
     ),
     r'waterHistoryPersisted': PropertySchema(
-      id: 25,
+      id: 26,
       name: r'waterHistoryPersisted',
       type: IsarType.objectList,
       target: r'HistoryPointer',
     ),
     r'waterSaved': PropertySchema(
-      id: 26,
+      id: 27,
       name: r'waterSaved',
       type: IsarType.double,
     ),
     r'waterUsed': PropertySchema(
-      id: 27,
+      id: 28,
       name: r'waterUsed',
       type: IsarType.double,
     )
@@ -285,35 +290,36 @@ void _taskSerialize(
     HistoryPointerSchema.serialize,
     object.energyHistoryPersisted,
   );
-  writer.writeBool(offsets[14], object.isDeleted);
-  writer.writeBool(offsets[15], object.isSynced);
-  writer.writeString(offsets[16], object.mappingState);
-  writer.writeLong(offsets[17], object.numberOfFaces);
-  writer.writeDateTime(offsets[18], object.sessionDate);
+  writer.writeBool(offsets[14], object.isArchive);
+  writer.writeBool(offsets[15], object.isDeleted);
+  writer.writeBool(offsets[16], object.isSynced);
+  writer.writeString(offsets[17], object.mappingState);
+  writer.writeLong(offsets[18], object.numberOfFaces);
+  writer.writeDateTime(offsets[19], object.sessionDate);
   writer.writeObjectList<TaskSnapshot>(
-    offsets[19],
+    offsets[20],
     allOffsets,
     TaskSnapshotSchema.serialize,
     object.snapshots,
   );
-  writer.writeString(offsets[20], object.status);
-  writer.writeDouble(offsets[21], object.surfaceArea);
-  writer.writeString(offsets[22], object.telemetryPort);
-  writer.writeDateTime(offsets[23], object.updatedAt);
+  writer.writeString(offsets[21], object.status);
+  writer.writeDouble(offsets[22], object.surfaceArea);
+  writer.writeString(offsets[23], object.telemetryPort);
+  writer.writeDateTime(offsets[24], object.updatedAt);
   writer.writeObjectList<TaskVideo>(
-    offsets[24],
+    offsets[25],
     allOffsets,
     TaskVideoSchema.serialize,
     object.videos,
   );
   writer.writeObjectList<HistoryPointer>(
-    offsets[25],
+    offsets[26],
     allOffsets,
     HistoryPointerSchema.serialize,
     object.waterHistoryPersisted,
   );
-  writer.writeDouble(offsets[26], object.waterSaved);
-  writer.writeDouble(offsets[27], object.waterUsed);
+  writer.writeDouble(offsets[27], object.waterSaved);
+  writer.writeDouble(offsets[28], object.waterUsed);
 }
 
 Task _taskDeserialize(
@@ -356,38 +362,39 @@ Task _taskDeserialize(
       ) ??
       [];
   object.id = id;
-  object.isDeleted = reader.readBool(offsets[14]);
-  object.isSynced = reader.readBool(offsets[15]);
-  object.mappingState = reader.readString(offsets[16]);
-  object.numberOfFaces = reader.readLongOrNull(offsets[17]);
-  object.sessionDate = reader.readDateTimeOrNull(offsets[18]);
+  object.isArchive = reader.readBool(offsets[14]);
+  object.isDeleted = reader.readBool(offsets[15]);
+  object.isSynced = reader.readBool(offsets[16]);
+  object.mappingState = reader.readString(offsets[17]);
+  object.numberOfFaces = reader.readLongOrNull(offsets[18]);
+  object.sessionDate = reader.readDateTimeOrNull(offsets[19]);
   object.snapshots = reader.readObjectList<TaskSnapshot>(
-        offsets[19],
+        offsets[20],
         TaskSnapshotSchema.deserialize,
         allOffsets,
         TaskSnapshot(),
       ) ??
       [];
-  object.status = reader.readString(offsets[20]);
-  object.surfaceArea = reader.readDouble(offsets[21]);
-  object.telemetryPort = reader.readString(offsets[22]);
-  object.updatedAt = reader.readDateTime(offsets[23]);
+  object.status = reader.readString(offsets[21]);
+  object.surfaceArea = reader.readDouble(offsets[22]);
+  object.telemetryPort = reader.readString(offsets[23]);
+  object.updatedAt = reader.readDateTime(offsets[24]);
   object.videos = reader.readObjectList<TaskVideo>(
-        offsets[24],
+        offsets[25],
         TaskVideoSchema.deserialize,
         allOffsets,
         TaskVideo(),
       ) ??
       [];
   object.waterHistoryPersisted = reader.readObjectList<HistoryPointer>(
-        offsets[25],
+        offsets[26],
         HistoryPointerSchema.deserialize,
         allOffsets,
         HistoryPointer(),
       ) ??
       [];
-  object.waterSaved = reader.readDouble(offsets[26]);
-  object.waterUsed = reader.readDouble(offsets[27]);
+  object.waterSaved = reader.readDouble(offsets[27]);
+  object.waterUsed = reader.readDouble(offsets[28]);
   return object;
 }
 
@@ -449,12 +456,14 @@ P _taskDeserializeProp<P>(
     case 15:
       return (reader.readBool(offset)) as P;
     case 16:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 17:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 18:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 19:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 20:
       return (reader.readObjectList<TaskSnapshot>(
             offset,
             TaskSnapshotSchema.deserialize,
@@ -462,15 +471,15 @@ P _taskDeserializeProp<P>(
             TaskSnapshot(),
           ) ??
           []) as P;
-    case 20:
-      return (reader.readString(offset)) as P;
     case 21:
-      return (reader.readDouble(offset)) as P;
-    case 22:
       return (reader.readString(offset)) as P;
+    case 22:
+      return (reader.readDouble(offset)) as P;
     case 23:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 24:
+      return (reader.readDateTime(offset)) as P;
+    case 25:
       return (reader.readObjectList<TaskVideo>(
             offset,
             TaskVideoSchema.deserialize,
@@ -478,7 +487,7 @@ P _taskDeserializeProp<P>(
             TaskVideo(),
           ) ??
           []) as P;
-    case 25:
+    case 26:
       return (reader.readObjectList<HistoryPointer>(
             offset,
             HistoryPointerSchema.deserialize,
@@ -486,9 +495,9 @@ P _taskDeserializeProp<P>(
             HistoryPointer(),
           ) ??
           []) as P;
-    case 26:
-      return (reader.readDouble(offset)) as P;
     case 27:
+      return (reader.readDouble(offset)) as P;
+    case 28:
       return (reader.readDouble(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1823,6 +1832,15 @@ extension TaskQueryFilter on QueryBuilder<Task, Task, QFilterCondition> {
     });
   }
 
+  QueryBuilder<Task, Task, QAfterFilterCondition> isArchiveEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isArchive',
+        value: value,
+      ));
+    });
+  }
+
   QueryBuilder<Task, Task, QAfterFilterCondition> isDeletedEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -3043,6 +3061,18 @@ extension TaskQuerySortBy on QueryBuilder<Task, Task, QSortBy> {
     });
   }
 
+  QueryBuilder<Task, Task, QAfterSortBy> sortByIsArchive() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchive', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Task, Task, QAfterSortBy> sortByIsArchiveDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchive', Sort.desc);
+    });
+  }
+
   QueryBuilder<Task, Task, QAfterSortBy> sortByIsDeleted() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isDeleted', Sort.asc);
@@ -3321,6 +3351,18 @@ extension TaskQuerySortThenBy on QueryBuilder<Task, Task, QSortThenBy> {
     });
   }
 
+  QueryBuilder<Task, Task, QAfterSortBy> thenByIsArchive() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchive', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Task, Task, QAfterSortBy> thenByIsArchiveDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchive', Sort.desc);
+    });
+  }
+
   QueryBuilder<Task, Task, QAfterSortBy> thenByIsDeleted() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isDeleted', Sort.asc);
@@ -3525,6 +3567,12 @@ extension TaskQueryWhereDistinct on QueryBuilder<Task, Task, QDistinct> {
     });
   }
 
+  QueryBuilder<Task, Task, QDistinct> distinctByIsArchive() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isArchive');
+    });
+  }
+
   QueryBuilder<Task, Task, QDistinct> distinctByIsDeleted() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'isDeleted');
@@ -3686,6 +3734,12 @@ extension TaskQueryProperty on QueryBuilder<Task, Task, QQueryProperty> {
       energyHistoryPersistedProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'energyHistoryPersisted');
+    });
+  }
+
+  QueryBuilder<Task, bool, QQueryOperations> isArchiveProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isArchive');
     });
   }
 

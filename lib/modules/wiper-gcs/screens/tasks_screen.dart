@@ -843,7 +843,6 @@
 //   );
 // }
 
-
 // air unit
 
 import 'package:flutter/material.dart';
@@ -862,7 +861,10 @@ import '../../../core/services/task_share_service.dart';
 import 'create_task_screen.dart';
 import 'link_setup_screen.dart';
 import 'wiper_main_screen.dart';
-import 'resume_task_screen.dart';
+// import 'resume_task_screen.dart';
+
+// archive btn
+import 'package:flutter/services.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -885,6 +887,20 @@ class _TasksScreenState extends State<TasksScreen> {
     // Removed runSync() from here!
     // The MK32 CPU cannot handle GraphQL network parsing and screen transition
     // animations simultaneously. This completely destroys the 20-second hang.
+  }
+
+  // archive btn
+  Future<void> _archive(Task task) async {
+    if (activeTaskId == task.id) {
+      _snack('Cannot archive an active task. Pause it first.', AppTheme.red);
+      return;
+    }
+
+    task.isArchive = true;
+    task.isSynced = false;
+    await IsarService.updateTask(task);
+    await _load();
+    _snack('"${task.buildingName}" archived', AppTheme.amber);
   }
 
   Future<void> runSync({bool manual = false}) async {
@@ -929,23 +945,38 @@ class _TasksScreenState extends State<TasksScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgPanel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
               leading: Icon(Icons.file_download_outlined, color: AppTheme.cyan),
-              title: Text('Import Received Task File', style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi)),
-              subtitle: const Text('Scan Downloads & Bluetooth folder for .vgcs files'),
+              title: Text(
+                'Import Received Task File',
+                style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+              ),
+              subtitle: const Text(
+                'Scan Downloads & Bluetooth folder for .vgcs files',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 TaskShareService.showImportFileDialog(context, _load);
               },
             ),
             ListTile(
-              leading: Icon(Icons.wifi_tethering_rounded, color: AppTheme.green),
-              title: Text('Receive via Local Wi-Fi / Hotspot', style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi)),
-              subtitle: const Text('Listen for direct transmission from Device A'),
+              leading: Icon(
+                Icons.wifi_tethering_rounded,
+                color: AppTheme.green,
+              ),
+              title: Text(
+                'Receive via Local Wi-Fi / Hotspot',
+                style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+              ),
+              subtitle: const Text(
+                'Listen for direct transmission from Device A',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 TaskShareService.startP2PReceiver(context, _load);
@@ -978,7 +1009,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
     if (mounted) {
       setState(() {
-        tasks = data;
+        tasks = data.where((task) => !task.isArchive).toList();
         _applySort();
         _loading = false;
 
@@ -1085,19 +1116,19 @@ class _TasksScreenState extends State<TasksScreen> {
       },
     ),
 
-    SidebarItem(
-      icon: Icons.restore_page_rounded,
-      label: 'Resume Task',
-      sublabel: 'Recover active task',
-      accent: AppTheme.amber,
-      onTap: () async {
-        await Navigator.push(
-          ctx,
-          MaterialPageRoute(builder: (_) => const ResumeTaskScreen()),
-        );
-        _load();
-      },
-    ),
+    // SidebarItem(
+    //   icon: Icons.restore_page_rounded,
+    //   label: 'Resume Task',
+    //   sublabel: 'Recover active task',
+    //   accent: AppTheme.amber,
+    //   onTap: () async {
+    //     await Navigator.push(
+    //       ctx,
+    //       MaterialPageRoute(builder: (_) => const ResumeTaskScreen()),
+    //     );
+    //     _load();
+    //   },
+    // ),
     SidebarItem(
       icon: Icons.arrow_back_rounded,
       label: 'Bot Select',
@@ -1154,40 +1185,40 @@ class _TasksScreenState extends State<TasksScreen> {
             ),
           ),
         ),
-        GestureDetector(
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CreateTaskScreen()),
-            );
-            _load();
-          },
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.cyanFaint,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.cyan.withOpacity(0.4)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, color: AppTheme.cyan, size: 15),
-                const SizedBox(width: 5),
-                Text(
-                  'NEW',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    color: AppTheme.cyan,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        // GestureDetector(
+        //   onTap: () async {
+        //     await Navigator.push(
+        //       context,
+        //       MaterialPageRoute(builder: (_) => const CreateTaskScreen()),
+        //     );
+        //     _load();
+        //   },
+        //   child: Container(
+        //     margin: const EdgeInsets.only(right: 8),
+        //     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        //     decoration: BoxDecoration(
+        //       color: AppTheme.cyanFaint,
+        //       borderRadius: BorderRadius.circular(6),
+        //       border: Border.all(color: AppTheme.cyan.withOpacity(0.4)),
+        //     ),
+        //     child: Row(
+        //       mainAxisSize: MainAxisSize.min,
+        //       children: [
+        //         Icon(Icons.add_rounded, color: AppTheme.cyan, size: 15),
+        //         const SizedBox(width: 5),
+        //         Text(
+        //           'NEW',
+        //           style: GoogleFonts.jetBrainsMono(
+        //             fontSize: 10,
+        //             color: AppTheme.cyan,
+        //             fontWeight: FontWeight.w700,
+        //             letterSpacing: 1,
+        //           ),
+        //         ),
+        //       ],
+        //     ),
+        //   ),
+        // ),
         GestureDetector(
           onTap: () => _showReceiveMenu(context),
           child: Container(
@@ -1358,6 +1389,8 @@ class _TasksScreenState extends State<TasksScreen> {
             },
             onToggle: () => _toggleMission(task),
             onDelete: () => _confirmDelete(task),
+            // archive btn
+            onArchive: () => _archive(task),
           );
         },
       ),
@@ -1429,6 +1462,7 @@ class _TaskCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
+  final VoidCallback onArchive;
 
   const _TaskCard({
     required this.task,
@@ -1438,6 +1472,7 @@ class _TaskCard extends StatefulWidget {
     required this.onTap,
     required this.onToggle,
     required this.onDelete,
+    required this.onArchive,
   });
 
   @override
@@ -1448,9 +1483,10 @@ class _TaskCardState extends State<_TaskCard> {
   @override
   Widget build(BuildContext context) {
     final accent = widget.isActive ? AppTheme.green : AppTheme.cyan;
-
+// archive btn
     return GestureDetector(
       onTap: widget.onTap,
+      onLongPress: _showTaskActions,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(16),
@@ -1514,10 +1550,10 @@ class _TaskCardState extends State<_TaskCard> {
             Expanded(child: _missionToggle(accent)),
             const SizedBox(width: 8),
             _reportBtn(accent),
-            const SizedBox(width: 8),
-            _deleteBtn(),
-            const SizedBox(width: 8),
-            _openBtn(accent),
+            // const SizedBox(width: 8),
+            // _deleteBtn(),
+            // const SizedBox(width: 8),
+            // _openBtn(accent),
           ],
         ),
       ],
@@ -1544,11 +1580,36 @@ class _TaskCardState extends State<_TaskCard> {
     child: Icon(Icons.domain_rounded, color: accent, size: 20),
   );
 
+  // Widget _titleBlock(Color accent) => Column(
+  //   crossAxisAlignment: CrossAxisAlignment.start,
+  //   children: [
+  //     Text(
+  //       widget.task.buildingName ?? 'Unknown Building',
+  //       style: GoogleFonts.barlowCondensed(
+  //         fontSize: 16,
+  //         fontWeight: FontWeight.w700,
+  //         color: AppTheme.textHi,
+  //         letterSpacing: 0.5,
+  //       ),
+  //       overflow: TextOverflow.ellipsis,
+  //     ),
+  //     Text(
+  //       '#${widget.task.id.toString().padLeft(4, '0')}',
+  //       style: GoogleFonts.jetBrainsMono(
+  //         fontSize: 9,
+  //         color: accent,
+  //         letterSpacing: 1,
+  //       ),
+  //     ),
+  //   ],
+  // );
+
+  // archive btn
   Widget _titleBlock(Color accent) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        widget.task.buildingName ?? 'Unknown Building',
+        widget.task.buildingName,
         style: GoogleFonts.barlowCondensed(
           fontSize: 16,
           fontWeight: FontWeight.w700,
@@ -1568,6 +1629,121 @@ class _TaskCardState extends State<_TaskCard> {
     ],
   );
 
+  // void _showTaskActions() {
+  //   HapticFeedback.mediumImpact();
+  //   showModalBottomSheet(
+  //     context: context,
+  //     backgroundColor: AppTheme.bgPanel,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+  //     ),
+  //     builder: (ctx) => SafeArea(
+  //       child: Wrap(
+  //         children: [
+  //           Padding(
+  //             padding: const EdgeInsets.all(8.0),
+  //             child: Text(
+  //               widget.task.buildingName,
+  //               style: GoogleFonts.barlowCondensed(
+  //                 fontSize: 18,
+  //                 fontWeight: FontWeight.w700,
+  //                 color: AppTheme.textHi,
+  //               ),
+  //             ),
+  //           ),
+  //           ListTile(
+  //             leading: Icon(Icons.archive_outlined, color: AppTheme.amber),
+  //             title: Text(
+  //               'Archive',
+  //               style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+  //             ),
+  //             subtitle: const Text('Hide from list, keep data'),
+  //             onTap: () {
+  //               Navigator.pop(ctx);
+  //               widget.onArchive();
+  //             },
+  //           ),
+  //           ListTile(
+  //             leading: Icon(Icons.delete_outline_rounded, color: AppTheme.red),
+  //             title: Text(
+  //               'Delete',
+  //               style: GoogleFonts.jetBrainsMono(color: AppTheme.red),
+  //             ),
+  //             subtitle: const Text('Permanently remove this task'),
+  //             onTap: () {
+  //               Navigator.pop(ctx);
+  //               widget.onDelete();
+  //             },
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  void _showTaskActions() {
+  HapticFeedback.mediumImpact();
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      alignment: Alignment.bottomCenter, // moves the box to the bottom
+      backgroundColor: AppTheme.bgPanel,
+      insetPadding: const EdgeInsets.fromLTRB(24, 24, 24, 32), // gap from the bottom edge
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppTheme.borderMid),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Text(
+                  widget.task.buildingName,
+                  style: GoogleFonts.barlowCondensed(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textHi,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.archive_outlined, color: AppTheme.amber),
+                title: Text(
+                  'Archive',
+                  style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+                ),
+                subtitle: const Text('Hide from list, keep data'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  widget.onArchive();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: AppTheme.red),
+                title: Text(
+                  'Delete',
+                  style: GoogleFonts.jetBrainsMono(color: AppTheme.red),
+                ),
+                subtitle: const Text('Permanently remove this task'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  widget.onDelete();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
   Widget _statusChip(Color accent) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
     decoration: BoxDecoration(
@@ -1579,7 +1755,7 @@ class _TaskCardState extends State<_TaskCard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         PulseDot(color: accent, size: 5, pulse: widget.isActive),
-        const SizedBox(width: 4),
+        const SizedBox(width: 4,),
         Text(
           widget.isActive ? 'ACTIVE' : 'IDLE',
           style: GoogleFonts.jetBrainsMono(
@@ -1644,18 +1820,18 @@ class _TaskCardState extends State<_TaskCard> {
                   ? AppTheme.textLo
                   : (widget.isActive ? AppTheme.amber : AppTheme.green),
             ),
-            const SizedBox(width: 6),
-            Text(
-              widget.isActive ? 'PAUSE' : 'START',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: disabled
-                    ? AppTheme.textLo
-                    : (widget.isActive ? AppTheme.amber : AppTheme.green),
-                letterSpacing: 1,
-              ),
-            ),
+            // const SizedBox(width: 6),
+            // Text(
+            //   widget.isActive ? 'PAUSE' : 'START',
+            //   style: GoogleFonts.jetBrainsMono(
+            //     fontSize: 9,
+            //     fontWeight: FontWeight.w700,
+            //     color: disabled
+            //         ? AppTheme.textLo
+            //         : (widget.isActive ? AppTheme.amber : AppTheme.green),
+            //     letterSpacing: 1,
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -1718,33 +1894,33 @@ class _TaskCardState extends State<_TaskCard> {
     ),
   );
 
-  Widget _deleteBtn() => GestureDetector(
-    onTap: widget.onDelete,
-    child: Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: AppTheme.red.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.red.withOpacity(0.2)),
-      ),
-      child: Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.red),
-    ),
-  );
+  // Widget _deleteBtn() => GestureDetector(
+  //   onTap: widget.onDelete,
+  //   child: Container(
+  //     width: 36,
+  //     height: 36,
+  //     decoration: BoxDecoration(
+  //       color: AppTheme.red.withOpacity(0.06),
+  //       borderRadius: BorderRadius.circular(6),
+  //       border: Border.all(color: AppTheme.red.withOpacity(0.2)),
+  //     ),
+  //     child: Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.red),
+  //   ),
+  // );
 
-  Widget _openBtn(Color accent) => GestureDetector(
-    onTap: widget.onTap,
-    child: Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: accent.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: accent.withOpacity(0.3)),
-      ),
-      child: Icon(Icons.open_in_new_rounded, size: 16, color: accent),
-    ),
-  );
+  // Widget _openBtn(Color accent) => GestureDetector(
+  //   onTap: widget.onTap,
+  //   child: Container(
+  //     width: 36,
+  //     height: 36,
+  //     decoration: BoxDecoration(
+  //       color: accent.withOpacity(0.08),
+  //       borderRadius: BorderRadius.circular(6),
+  //       border: Border.all(color: accent.withOpacity(0.3)),
+  //     ),
+  //     child: Icon(Icons.open_in_new_rounded, size: 16, color: accent),
+  //   ),
+  // );
 
   Widget _info(Color accent) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1755,22 +1931,38 @@ class _TaskCardState extends State<_TaskCard> {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgPanel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
-              leading: Icon(Icons.bluetooth_searching_rounded, color: AppTheme.cyan),
-              title: Text('Share via Bluetooth / Quick Share', style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi)),
-              subtitle: const Text('Export task state bundle to nearby devices'),
+              leading: Icon(
+                Icons.bluetooth_searching_rounded,
+                color: AppTheme.cyan,
+              ),
+              title: Text(
+                'Share via Bluetooth / Quick Share',
+                style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+              ),
+              subtitle: const Text(
+                'Export task state bundle to nearby devices',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 TaskShareService.shareTaskViaSystem(task, context);
               },
             ),
             ListTile(
-              leading: Icon(Icons.wifi_tethering_rounded, color: AppTheme.green),
-              title: Text('Send directly over Local Wi-Fi', style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi)),
+              leading: Icon(
+                Icons.wifi_tethering_rounded,
+                color: AppTheme.green,
+              ),
+              title: Text(
+                'Send directly over Local Wi-Fi',
+                style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
+              ),
               subtitle: const Text('Direct push to MK32 receiver IP'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -1789,20 +1981,36 @@ class _TaskCardState extends State<_TaskCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgPanel,
-        title: Text('Enter Target MK32 IP', style: GoogleFonts.barlowCondensed(color: AppTheme.textHi)),
+        title: Text(
+          'Enter Target MK32 IP',
+          style: GoogleFonts.barlowCondensed(color: AppTheme.textHi),
+        ),
         content: TextField(
           controller: ipCtrl,
           decoration: const InputDecoration(hintText: 'e.g. 192.168.43.12'),
           style: GoogleFonts.jetBrainsMono(color: AppTheme.textHi),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              TaskShareService.sendTaskOverWifi(task, ipCtrl.text.trim(), context);
+              TaskShareService.sendTaskOverWifi(
+                task,
+                ipCtrl.text.trim(),
+                context,
+              );
             },
-            child: Text('SEND', style: TextStyle(color: AppTheme.green, fontWeight: FontWeight.bold)),
+            child: Text(
+              'SEND',
+              style: TextStyle(
+                color: AppTheme.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -1828,21 +2036,17 @@ class _TaskCardState extends State<_TaskCard> {
           decoration: BoxDecoration(
             color: AppTheme.cyan.withOpacity(0.08),
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppTheme.cyan.withOpacity(0.3)), 
+            border: Border.all(color: AppTheme.cyan.withOpacity(0.3)),
           ),
           child: Icon(Icons.share_rounded, size: 16, color: AppTheme.cyan),
         ),
       ),
 
-      const SizedBox(width: 8),
-      _deleteBtn(),
-      const SizedBox(width: 8),
-      _openBtn(accent),
+      // const SizedBox(width: 8),
+      // _deleteBtn(),
+      // const SizedBox(width: 8),
+      // _openBtn(accent),
     ],
   );
 }
-
-
-
-
 

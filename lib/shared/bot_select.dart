@@ -158,14 +158,19 @@ class _BotSelectScreenState extends State<BotSelectScreen>
         MaterialPageRoute(builder: (_) => const SettingsScreen()),
       ),
     ),
-    // SidebarItem(
-    //   icon: Icons.logout_rounded,
-    //   label: 'Sign Out',
-    //   sublabel: 'End session',
-    //   accent: AppTheme.red,
-    //   onTap: () => _confirmSignOut(ctx),
-    // ),
   ];
+   List<SidebarItem> _bottomItems(BuildContext ctx) => [
+    SidebarItem(
+      
+      icon: Icons.logout_rounded,
+      
+      label: 'Sign Out',
+      sublabel: 'End session',
+      accent: AppTheme.red,
+      onTap: () => _confirmSignOut(ctx),
+    ),
+   ];
+  
 
   @override
   Widget build(BuildContext context) {
@@ -181,6 +186,7 @@ class _BotSelectScreenState extends State<BotSelectScreen>
           screenTitle: 'Control Module',
           screenCode: 'SYS · BOT · SELECT',
           items: _sidebarItems(context),
+          bottomItems: _bottomItems(context),
           activeIndex: -1,
           body: Stack(
             children: [

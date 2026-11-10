@@ -31,6 +31,7 @@ class SidebarItem {
 class GcsScaffold extends StatefulWidget {
   final Widget body;
   final List<SidebarItem> items;
+  final List<SidebarItem> bottomItems; 
   final int activeIndex;
   final String screenTitle;
   final String screenCode;
@@ -46,6 +47,7 @@ class GcsScaffold extends StatefulWidget {
     required this.screenCode,
     this.accentColor,
     this.actions,
+    this.bottomItems = const [],
   });
 
   @override
@@ -312,6 +314,7 @@ class _GcsScaffoldState extends State<GcsScaffold>
                     width: sw,
                     items: widget.items,
                     activeIndex: widget.activeIndex,
+                    bottomItems: widget.bottomItems, // Pass bottomItems to the sidebar panel
                     onClose: _closeSidebar,
                   ),
                 ),
@@ -382,6 +385,7 @@ class _MenuButtonState extends State<_MenuButton> {
 class _SidebarPanel extends StatelessWidget {
   final double width;
   final List<SidebarItem> items;
+  final List<SidebarItem> bottomItems; // Added for Logout
   final int activeIndex;
   final VoidCallback onClose;
 
@@ -390,6 +394,7 @@ class _SidebarPanel extends StatelessWidget {
     required this.items,
     required this.activeIndex,
     required this.onClose,
+    required this.bottomItems,
   });
 
   @override
@@ -507,36 +512,56 @@ class _SidebarPanel extends StatelessWidget {
                   color: AppTheme.borderDim.withOpacity(0.5),
                 ),
                 const SizedBox(height: 12),
-                _NavItem(
-                  item: SidebarItem(
-                    icon: Icons.logout_rounded,
-                    label: 'END SESSION',
-                    sublabel: 'Securely log out of Vivid',
-                    onTap: () {}, // Dummy function, overridden below
-                  ),
-                  active: false,
-                  accent: AppTheme.red,
-                  onTap: () async {
-                    onClose();
+                // _NavItem(
+                //   item: SidebarItem(
+                //     icon: Icons.logout_rounded,
+                //     label: 'END SESSION',
+                //     sublabel: 'Securely log out of Vivid',
+                //     onTap: () {}, // Dummy function, overridden below
+                //   ),
+                //   active: false,
+                //   accent: AppTheme.red,
+                //   onTap: () async {
+                //     onClose();
 
-                    // 👉 CLEAR PERSISTENT SESSION
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.remove('isLoggedIn');
+                //     // 👉 CLEAR PERSISTENT SESSION
+                //     final prefs = await SharedPreferences.getInstance();
+                //     await prefs.remove('isLoggedIn');
 
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
+                //     if (context.mounted) {
+                //       Navigator.pushAndRemoveUntil(
+                //         context,
+                //         MaterialPageRoute(builder: (_) => const LoginScreen()),
+                //         (route) => false,
+                //       );
+                //     }
+                //   },
+                // ),
 
                 // 👈 END OF FIX
               ],
             ),
           ),
+          if (bottomItems.isNotEmpty)
+  Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: AppTheme.borderDim)),
+    ),
+    child: Column(
+      children: bottomItems.map((item) {
+        return _NavItem(
+          item: item,
+          active: false,
+          accent: item.accent ?? AppTheme.cyan,
+          onTap: () {
+            onClose();
+            Future.delayed(const Duration(milliseconds: 200), item.onTap);
+          },
+        );
+      }).toList(),
+    ),
+  ),
           Container(
             padding: EdgeInsets.fromLTRB(20, 14, 20, 14 + bottom),
             decoration: BoxDecoration(

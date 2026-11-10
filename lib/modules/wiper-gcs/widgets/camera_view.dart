@@ -7097,7 +7097,6 @@
 // }
 
 
-
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -7558,45 +7557,240 @@ void didUpdateWidget(covariant CameraView old) {
     }
   }
 
-  void _spawnFFmpegProcess(RecordSessionState s, int currentStartNum) async {
-    if (!s.isRecording || s.isPaused) return;
+  // void _spawnFFmpegProcess(RecordSessionState s, int currentStartNum) async {
+  //   if (!s.isRecording || s.isPaused) return;
 
-    final dir = await _targetDir;
-    final String currentFilePath =
-        '${dir.path}/${_basePrefix}_${currentStartNum.toString().padLeft(3, '0')}.ts';
-    s.currentFilePath = currentFilePath;
+  //   final dir = await _targetDir;
+  //   final String currentFilePath =
+  //       '${dir.path}/${_basePrefix}_${currentStartNum.toString().padLeft(3, '0')}.ts';
+  //   s.currentFilePath = currentFilePath;
 
-    final List<String> arguments = [
-      '-y',
-      '-timeout', '10000000',
-      '-rtsp_transport', 'tcp',
-      // '-fflags', '+genpts+discardcorrupt',
-      '-fflags', '+genpts+discardcorrupt+nobuffer',
-      '-flags', 'low_delay',
-      '-probesize', '32768',
-      '-analyzeduration', '0',
-      '-i', widget.url,
+  //   final List<String> arguments = [
+  //     '-y',
+  //     '-timeout', '10000000',
+  //     '-rtsp_transport', 'tcp',
+  //     // '-fflags', '+genpts+discardcorrupt',
+  //     '-fflags', '+genpts+discardcorrupt+nobuffer',
+  //     '-flags', 'low_delay',
+  //     '-probesize', '32768',
+  //     '-analyzeduration', '0',
+  //     '-i', widget.url,
 
-      // Output 1: local preview relay
-      '-map', '0:v', '-c:v', 'copy', '-an',
-      '-bsf:v', 'dump_extra',
-      '-f', 'mpegts',
-      '-mpegts_flags', '+resend_headers',
-      '-pat_period', '0.1',
-      '-flush_packets', '1',
-      '-muxdelay', '0',
-      '-muxpreload', '0',
-      _relayOutUrl,
+  //     // Output 1: local preview relay
+  //     '-map', '0:v', '-c:v', 'copy', '-an',
+  //     '-bsf:v', 'dump_extra',
+  //     '-f', 'mpegts',
+  //     '-mpegts_flags', '+resend_headers',
+  //     '-pat_period', '0.1',
+  //     '-flush_packets', '1',
+  //     '-muxdelay', '0',
+  //     '-muxpreload', '0',
+  //     _relayOutUrl,
 
-      // Output 2: file
-      '-map', '0:v', '-c:v', 'copy', '-an',
-      '-f', 'mpegts',
-      currentFilePath,
-    ];
+  //     // Output 2: file
+  //     '-map', '0:v', '-c:v', 'copy', '-an',
+  //     '-f', 'mpegts',
+  //     currentFilePath,
+  //   ];
 
-    final relayReady = Completer<void>();
-    try {
-      s.session = await FFmpegKit.executeWithArgumentsAsync(arguments, (finishedSession) async {
+  //   final relayReady = Completer<void>();
+  //   try {
+  //     s.session = await FFmpegKit.executeWithArgumentsAsync(arguments, (finishedSession) async {
+  //       final returnCode = await finishedSession.getReturnCode();
+  //       if (returnCode != null && !returnCode.isValueSuccess() && !returnCode.isValueCancel()) {
+  //         final logs = await finishedSession.getLogsAsString();
+  //         debugPrint("FFMPEG LOG: $logs");
+  //         if (mounted) {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             SnackBar(
+  //               content: Text('CRASH: ${logs?.split('\n').last ?? "Error"}'),
+  //               backgroundColor: Colors.red,
+  //               duration: const Duration(seconds: 10),
+  //             ),
+  //           );
+  //         }
+  //       }
+
+  //       await Future.delayed(const Duration(seconds: 1));
+
+  //       final file = File(currentFilePath);
+  //       if (await file.exists()) {
+  //         final length = await file.length();
+  //         if (length > 0 && !s.holdSave && !GlobalRecordingManager.registeredFiles.contains(currentFilePath)) {
+  //           try {
+  //             widget.onVideoRecorded?.call(currentFilePath, DateTime.now(), widget.label);
+  //             GlobalRecordingManager.registeredFiles.add(currentFilePath);
+
+  //             if (mounted) {
+  //               final mb = (length / (1024 * 1024)).toStringAsFixed(2);
+  //               ScaffoldMessenger.of(context).showSnackBar(
+  //                 SnackBar(
+  //                   content: Text('✅ DB SAVED: $mb MB'),
+  //                   backgroundColor: Colors.green,
+  //                   duration: const Duration(seconds: 5),
+  //                 ),
+  //               );
+  //             }
+  //           } catch (e) {
+  //             if (mounted) {
+  //               ScaffoldMessenger.of(context).showSnackBar(
+  //                 SnackBar(
+  //                   content: Text('❌ DB ERROR: $e'),
+  //                   backgroundColor: Colors.red,
+  //                   duration: const Duration(seconds: 10),
+  //                 ),
+  //               );
+  //             }
+  //           }
+  //         }
+  //       }
+
+  //       // Auto-restart if the camera link dropped while still recording
+  //       if (s.isRecording && !s.isPaused) {
+  //         await Future.delayed(const Duration(seconds: 1));
+  //         final nextNum = await _getNextSequenceNumber(dir.path);
+  //         _spawnFFmpegProcess(s, nextNum);
+  //         // final relay = _relayUrl;
+  //         // Future.delayed(const Duration(milliseconds: 2500), () {
+  //         //   if (s.isRecording && !s.isPaused) _setSource(relay);
+  //         // });
+  //       }
+  //     },
+  //     null, // log callback
+  //   (stats) {
+  //     if ((stats.getSize() > 0 || stats.getVideoFrameNumber() > 0) &&
+  //         !relayReady.isCompleted) {
+  //       relayReady.complete();
+  //     }
+  //   },
+  // );
+
+  // // relayReady.future
+  // //     .timeout(const Duration(seconds: 6), onTimeout: () {})
+  // //     .then((_) {
+  // //   if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
+  // // }
+      
+  // //     );
+  // Future.delayed(const Duration(milliseconds: 300), () {
+  //       if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
+  //     });
+  //   } catch (e) {
+  //     debugPrint("FATAL DART ERROR: $e");
+  //   }
+  // }
+
+  // 480p @ 15 fps
+static const int outH = 480;
+static int outFps = 15;
+static int keyInt = outFps; // keyframe every 1 second
+
+void _spawnFFmpegProcess(RecordSessionState s, int currentStartNum) async {
+  if (!s.isRecording || s.isPaused) return;
+
+  final dir = await _targetDir;
+  final String currentFilePath =
+      '${dir.path}/${_basePrefix}_${currentStartNum.toString().padLeft(3, '0')}.ts';
+  s.currentFilePath = currentFilePath;
+
+  final List<String> arguments = [
+    '-y',
+
+    // ---------- INPUT ----------
+    '-timeout', '10000000',
+    '-rtsp_transport', 'tcp',
+    // Give the decoder enough data to read SPS/PPS properly.
+    // (tiny probesize/analyzeduration is fine for -c copy, NOT for transcoding)
+    '-probesize', '1000000',
+    '-analyzeduration', '1000000',
+    // No discardcorrupt / nobuffer here: they cause broken reference frames
+    '-fflags', '+genpts',
+    // OPTIONAL hardware decode if software decode is too slow:
+    // '-c:v', 'h264_mediacodec',
+    '-i', widget.url,
+
+    // ---------- VIDEO FILTER ----------
+    '-map', '0:v:0',
+    '-an',
+    '-vf', 'scale=-2:$outH:flags=fast_bilinear,fps=$outFps,format=yuv420p',
+
+    // ---------- ENCODER ----------
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-profile:v', 'baseline',
+    '-level', '3.1',
+    '-b:v', '800k',
+    '-maxrate', '850k',
+    '-bufsize', '1700k',
+    '-g', '$keyInt',
+    '-keyint_min', '$keyInt',
+    '-sc_threshold', '0',
+    '-bf', '0',
+    // SPS/PPS before every keyframe so the relay player can join anytime
+    '-x264-params', 'repeat-headers=1:scenecut=0',
+    '-fps_mode', 'cfr',
+
+    // ---------- OUTPUTS ----------
+    '-f', 'tee',
+    '[f=mpegts]$currentFilePath|'
+        '[f=mpegts:onfail=ignore:mpegts_flags=+resend_headers:pat_period=0.1:flush_packets=1]$_relayOutUrl',
+  ];
+// void _spawnFFmpegProcess(RecordSessionState s, int currentStartNum) async {
+//     if (!s.isRecording || s.isPaused) return;
+
+//     final dir = await _targetDir;
+//     final String currentFilePath =
+//         '${dir.path}/${_basePrefix}_${currentStartNum.toString().padLeft(3, '0')}.ts';
+//     s.currentFilePath = currentFilePath;
+
+//     // 1. Set FPS to 15
+//     const int w = 854;
+//     const int h = 480;
+//     const int fps = 15; 
+
+//     final List<String> arguments = [
+//       '-y',
+//       '-timeout', '10000000',
+//       '-rtsp_transport', 'tcp',
+//       '-fflags', '+genpts+discardcorrupt+nobuffer',
+//       '-flags', 'low_delay',
+//       '-probesize', '32768',
+//       '-analyzeduration', '0',
+//       '-i', widget.url,
+
+//       '-map', '0:v',
+//       '-an',
+//       '-vf', 'scale=$w:$h,fps=$fps',
+//       '-c:v', 'libx264',
+      
+//       // 2. Improve compression efficiency without causing CPU lag
+//       '-preset', 'veryfast',   
+//       '-tune', 'zerolatency',
+//       '-profile:v', 'main',    
+//       '-pix_fmt', 'yuv420p',
+      
+//       // 3. Throttle bitrate to hit ~400-450MB per hour
+//       '-b:v', '850k',          
+//       '-maxrate', '1000k',     
+//       '-bufsize', '2000k',     
+      
+//       // 4. Update keyframe interval to match the new 15 FPS (1 keyframe per second)
+//       '-g', '15',              
+//       '-keyint_min', '15',
+//       '-bf', '0',
+
+//       '-f', 'tee',
+//       '[f=mpegts]$currentFilePath|'
+//           '[f=mpegts:mpegts_flags=+resend_headers:pat_period=0.1:flush_packets=1]$_relayOutUrl',
+//     ];
+    
+
+  final relayReady = Completer<void>();
+  try {
+    s.session = await FFmpegKit.executeWithArgumentsAsync(
+      arguments,
+      (finishedSession) async {
         final returnCode = await finishedSession.getReturnCode();
         if (returnCode != null && !returnCode.isValueSuccess() && !returnCode.isValueCancel()) {
           final logs = await finishedSession.getLogsAsString();
@@ -7617,7 +7811,9 @@ void didUpdateWidget(covariant CameraView old) {
         final file = File(currentFilePath);
         if (await file.exists()) {
           final length = await file.length();
-          if (length > 0 && !s.holdSave && !GlobalRecordingManager.registeredFiles.contains(currentFilePath)) {
+          if (length > 0 &&
+              !s.holdSave &&
+              !GlobalRecordingManager.registeredFiles.contains(currentFilePath)) {
             try {
               widget.onVideoRecorded?.call(currentFilePath, DateTime.now(), widget.label);
               GlobalRecordingManager.registeredFiles.add(currentFilePath);
@@ -7651,35 +7847,29 @@ void didUpdateWidget(covariant CameraView old) {
           await Future.delayed(const Duration(seconds: 1));
           final nextNum = await _getNextSequenceNumber(dir.path);
           _spawnFFmpegProcess(s, nextNum);
-          // final relay = _relayUrl;
-          // Future.delayed(const Duration(milliseconds: 2500), () {
-          //   if (s.isRecording && !s.isPaused) _setSource(relay);
-          // });
         }
       },
       null, // log callback
-    (stats) {
-      if ((stats.getSize() > 0 || stats.getVideoFrameNumber() > 0) &&
-          !relayReady.isCompleted) {
-        relayReady.complete();
-      }
-    },
-  );
+      (stats) {
+        // First encoded frames are out -> relay is about to carry video
+        if ((stats.getSize() > 0 || stats.getVideoFrameNumber() > 0) &&
+            !relayReady.isCompleted) {
+          relayReady.complete();
+        }
+      },
+    );
 
-  // relayReady.future
-  //     .timeout(const Duration(seconds: 6), onTimeout: () {})
-  //     .then((_) {
-  //   if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
-  // }
-      
-  //     );
-  Future.delayed(const Duration(milliseconds: 300), () {
-        if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
-      });
-    } catch (e) {
-      debugPrint("FATAL DART ERROR: $e");
-    }
+    // Wait for real output (max 8 s), then give the first keyframe a moment
+    relayReady.future
+        .timeout(const Duration(seconds: 8), onTimeout: () {})
+        .then((_) async {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (s.isRecording && !s.isPaused) _setSource(_relayUrl);
+    });
+  } catch (e) {
+    debugPrint("FATAL DART ERROR: $e");
   }
+}
 
   Future<void> _pauseRecording({VoidCallback? updateDialog}) async {
     final s = session;
@@ -8195,6 +8385,9 @@ void didUpdateWidget(covariant CameraView old) {
     );
   }
 }
+
+
+
 
 
 
@@ -9182,3 +9375,23 @@ void didUpdateWidget(covariant CameraView old) {
 //     );
 //   }
 // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 

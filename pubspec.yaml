@@ -48,9 +48,13 @@ dependencies:
   usb_serial: ^0.5.2  # For Android (MK32)
   flutter_libserialport: ^0.6.0  # For Windows & Ubuntu
   libserialport: ^0.3.0
+
   
   # Permissions
   permission_handler: ^11.0.0
+  # FOR CSV FILE:
+  path_provider: ^2.1.0
+  share_plus: ^10.0.0
 
   # database
   isar: ^3.1.0
@@ -61,10 +65,10 @@ dependencies:
   hive_ce: ^2.19.3
 
   pdf: ^3.10.4
-  path_provider: ^2.1.1
+
   open_file: ^3.3.2 # Allows opening the PDF immediately after generation
   screenshot: ^3.0.0
-  share_plus: ^12.0.2
+
   flutter_tts: ^4.2.5
   video_thumbnail: ^0.5.6
   ffmpeg_kit_flutter_new: ^4.5.0
@@ -85,3 +89,5 @@ flutter:
   assets:
     - lib/assets/image.png
     - lib/assets/bot_image.png
+# for csv file
+

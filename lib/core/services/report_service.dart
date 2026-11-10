@@ -106,7 +106,7 @@ class ReportService {
                 pw.SizedBox(height: 8),
 
                 _buildRow("Building:", task.buildingName ?? 'N/A'),
-                _buildRow("Device ID:", task.deviceId ?? 'N/A'),
+                // _buildRow("Device ID:", task.deviceId ?? 'N/A'),
                 _buildRow("Target Area:", "$totalArea sq.ft"),
                 _buildRow("Session Status:", task.status ?? 'PENDING'),
 

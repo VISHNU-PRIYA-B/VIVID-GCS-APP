@@ -1,1181 +1,4 @@
-// import 'dart:async';
-// import 'dart:convert';
-// import 'dart:io';
-// import 'dart:typed_data';
-
-// import 'package:flutter/material.dart';
-// import 'package:flutter_libserialport/flutter_libserialport.dart';
-// import 'package:google_fonts/google_fonts.dart';
-// import 'package:usb_serial/usb_serial.dart';
-
-// import '../../../core/models/task.dart';
-// import '../../../core/services/link_manager.dart';
-// import '../../../ui/app_theme.dart';
-// import '../../../ui/gcs_widgets.dart';
-// import 'package:fl_chart/fl_chart.dart';
-
-// // ═════════════════════════════════════════════════════════════════════════════
-// // TELEMETRY STATE MANAGER
-// // ═════════════════════════════════════════════════════════════════════════════
-// class WiperTelemetry extends ChangeNotifier {
-//   UsbPort? _usbPort;
-//   SerialPort? _desktopPort;
-//   RawDatagramSocket? _udpSocket;
-//   StreamSubscription<UsbEvent>? _usbEventSub;
-//   Timer? _watchdog;
-
-//   String connectionStatus = 'INITIALIZING...';
-//   Color statusColor = AppTheme.amber;
-//   bool isConnected = false;
-//   DateTime _lastDataTime = DateTime.now();
-//   bool _isDisposed = false;
-
-//   // ── SYSTEM 1: STABILIZATION ──
-//   bool stabFault = false;
-//   bool stabLatched = false;
-//   int chamberA = 0;
-//   int chamberB = 0;
-//   int thrusterDc1 = 0;
-//   int thrusterDc2 = 0;
-//   int impellerDc1 = 0;
-//   int impellerDc2 = 0;
-
-//   // ── SYSTEM 2: MOTION CONTROL ──
-//   bool motionFault = false;
-//   bool inMotion = false;
-//   int climbSpeed = 0;
-//   int altitude = 0;
-//   bool capstanFault = false;
-
-//   // ── SYSTEM 3: REMOTE CONTROL ──
-//   bool rcFault = false;
-//   bool rcConnected = false;
-
-//   // ── SYSTEM 4: POWER SYSTEM ──
-//   bool powerFault = false;
-//   bool acSupply = true;
-//   bool bus48vFault = false;
-//   bool bus24vFault = false;
-//   bool bus12vFault = false;
-//   bool bus8vFault = false;
-//   int batteryPct = 0;
-
-//   // ── SYSTEM 5: CLEANING SUB-SYSTEMS ──
-//   bool brush1 = false;
-//   bool brush2 = false;
-//   bool wiper1 = false;
-//   bool wiper2 = false;
-//   bool pump = false;
-//   double waterLvl = 0.0;
-
-//   // ── STATISTICS DATA ──
-//   double waterUsed = 0.0;
-//   double energyConsumed = 0.0;
-//   double areaCleaned = 0.0;
-
-//   // Chart tracking
-//   DateTime? _sessionStart;
-//   final List<FlSpot> waterHistory = [];
-//   final List<FlSpot> areaHistory = [];
-//   final List<FlSpot> energyHistory = [];
-
-//   void _recordHistoryPoint() {
-//     _sessionStart ??= DateTime.now();
-//     final hoursElapsed =
-//         DateTime.now().difference(_sessionStart!).inSeconds / 3600.0;
-
-//     waterHistory.add(FlSpot(hoursElapsed, waterUsed));
-//     areaHistory.add(FlSpot(hoursElapsed, areaCleaned));
-//     energyHistory.add(FlSpot(hoursElapsed, energyConsumed));
-//   }
-
-//   // NEW: Variables for Digital Twin & TTS
-//   double robotX = 0.0;
-//   double robotY = 0.0;
-//   double batteryLevel = 100.0;
-//   double waterLevel = 100.0;
-
-//   final List<int> _buffer = [];
-
-//   void initConnection() {
-//     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) {
-//       if (isConnected &&
-//           DateTime.now().difference(_lastDataTime).inSeconds > 2) {
-//         isConnected = false;
-//         _safeNotify();
-//       }
-//     });
-
-//     if (Platform.isAndroid && LinkManager.selectedUsbDevice != null) {
-//       _usbEventSub = UsbSerial.usbEventStream?.listen((UsbEvent event) {
-//         if (event.event == UsbEvent.ACTION_USB_DETACHED) {
-//           _closeUsbAndFallbackToAirUnit();
-//         }
-//       });
-//       _tryConnectAndroidUsb(
-//         LinkManager.selectedUsbDevice!,
-//         LinkManager.selectedBaudRate,
-//       ).then((success) {
-//         if (!success) _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
-//       });
-//     } else if ((Platform.isWindows || Platform.isLinux) &&
-//         LinkManager.selectedDesktopPort != null) {
-//       _tryConnectDesktopSerial(
-//         LinkManager.selectedDesktopPort!,
-//         LinkManager.selectedBaudRate,
-//       ).then((success) {
-//         if (!success) _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
-//       });
-//     } else {
-//       _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
-//     }
-//   }
-
-//   void disposeConnection() {
-//     _isDisposed = true;
-//     _usbPort?.close();
-//     if (_desktopPort != null && _desktopPort!.isOpen) _desktopPort!.close();
-//     _udpSocket?.close();
-//     _usbEventSub?.cancel();
-//     _watchdog?.cancel();
-//   }
-
-//   Future<bool> _tryConnectDesktopSerial(String portName, int baud) async {
-//     try {
-//       _desktopPort = SerialPort(portName);
-//       if (_desktopPort!.openReadWrite()) {
-//         _udpSocket?.close();
-//         _udpSocket = null;
-
-//         await Future.delayed(const Duration(milliseconds: 250));
-
-//         try {
-//           SerialPortConfig config = _desktopPort!.config;
-//           config.baudRate = baud;
-//           config.bits = 8;
-//           config.stopBits = 1;
-//           config.parity = SerialPortParity.none;
-//           config.setFlowControl(SerialPortFlowControl.none);
-
-//           config.dtr = 1;
-//           config.rts = 1;
-
-//           _desktopPort!.config = config;
-//         } catch (configError) {
-//           debugPrint("Serial Config Note: $configError");
-//         }
-
-//         connectionStatus = 'DESKTOP USB: $portName @ $baud BAUD';
-//         statusColor = AppTheme.green;
-//         _safeNotify();
-
-//         SerialPortReader reader = SerialPortReader(_desktopPort!, timeout: 10);
-//         reader.stream.listen(
-//           (Uint8List data) {
-//             _processMavlinkBytes(data);
-//           },
-//           onError: (err) {
-//             debugPrint("Serial Stream Error: $err");
-//           },
-//         );
-//         return true;
-//       } else {
-//         debugPrint("Failed to open port: ${SerialPort.lastError}");
-//       }
-//     } catch (e) {
-//       debugPrint("Desktop Serial Error: $e");
-//     }
-//     return false;
-//   }
-
-//   Future<bool> _tryConnectAndroidUsb(UsbDevice device, int baud) async {
-//     try {
-//       _usbPort = await device.create();
-//       bool openResult = await _usbPort!.open();
-
-//       if (openResult) {
-//         _udpSocket?.close();
-//         _udpSocket = null;
-
-//         await Future.delayed(const Duration(milliseconds: 200));
-
-//         await _usbPort!.setPortParameters(
-//           baud,
-//           UsbPort.DATABITS_8,
-//           UsbPort.STOPBITS_1,
-//           UsbPort.PARITY_NONE,
-//         );
-
-//         await Future.delayed(const Duration(milliseconds: 50));
-
-//         await _usbPort!.setDTR(true);
-//         await _usbPort!.setRTS(true);
-
-//         connectionStatus = 'MK32 USB: $baud BAUD';
-//         statusColor = AppTheme.green;
-//         _safeNotify();
-
-//         _usbPort!.inputStream!.listen((Uint8List data) {
-//           _processMavlinkBytes(data);
-//         });
-//         return true;
-//       }
-//     } catch (e) {
-//       debugPrint("USB Serial Error: $e");
-//     }
-//     return false;
-//   }
-
-//   void _processMavlinkBytes(Uint8List data) {
-//     _buffer.addAll(data);
-
-//     while (_buffer.isNotEmpty) {
-//       int magic = _buffer[0];
-
-//       if (magic != 0xFD && magic != 0xFE) {
-//         _buffer.removeAt(0);
-//         continue;
-//       }
-
-//       if (magic == 0xFE) {
-//         if (_buffer.length < 6) break;
-//         int payloadLen = _buffer[1];
-//         int frameLen = 8 + payloadLen;
-
-//         if (frameLen > 280) {
-//           _buffer.removeAt(0);
-//           continue;
-//         }
-//         if (_buffer.length < frameLen) break;
-
-//         int msgId = _buffer[5];
-//         if (msgId == 251) {
-//           try {
-//             _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
-//           } catch (e) {
-//             debugPrint("MAVLink v1 Parse Error: $e");
-//           }
-//         }
-//         _buffer.removeRange(0, frameLen);
-//       } else if (magic == 0xFD) {
-//         if (_buffer.length < 10) break;
-//         int payloadLen = _buffer[1];
-//         int incompatFlags = _buffer[2];
-//         bool hasSignature = (incompatFlags & 0x01) != 0;
-//         int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
-
-//         if (frameLen > 280) {
-//           _buffer.removeAt(0);
-//           continue;
-//         }
-//         if (_buffer.length < frameLen) break;
-
-//         int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
-//         if (msgId == 251) {
-//           try {
-//             _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
-//           } catch (e) {
-//             debugPrint("MAVLink v2 Parse Error: $e");
-//           }
-//         }
-//         _buffer.removeRange(0, frameLen);
-//       }
-//     }
-//   }
-
-//   void _closeUsbAndFallbackToAirUnit() {
-//     _usbPort?.close();
-//     _usbPort = null;
-//     _startMockJsonUdp(); 
-//   }
-
-//   // ── NEW: MOCK JSON UDP LISTENER (SAFE BIND) ──
-//   Future<void> _startMockJsonUdp() async {
-//     connectionStatus = 'SEARCHING MOCK UDP...';
-//     statusColor = AppTheme.amber;
-//     _safeNotify();
-
-//     _udpSocket?.close();
-//     _udpSocket = null;
-
-//     try {
-//       _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 54321);
-//       _udpSocket!.listen((RawSocketEvent event) {
-//         if (event == RawSocketEvent.read) {
-//           Datagram? dg = _udpSocket!.receive();
-//           if (dg != null) {
-//             if (!connectionStatus.contains('MOCK DATA')) {
-//               connectionStatus = 'MOCK DATA LINKED';
-//               statusColor = AppTheme.cyan;
-//               _safeNotify();
-//             }
-            
-//             try {
-//               String jsonStr = utf8.decode(dg.data);
-//               Map<String, dynamic> data = jsonDecode(jsonStr);
-              
-//               _lastDataTime = DateTime.now();
-//               if (!isConnected) isConnected = true;
-
-//               // 1. Core Bot Status
-//               batteryPct = (data['battery'] as num).toInt();
-//               altitude = (data['position']['z'] as num).toInt();
-//               robotX = (data['position']['x'] as num).toDouble();
-//               robotY = (data['position']['y'] as num).toDouble();
-              
-//               // 2. Convert raw speed (m/s) to Climb Speed (m/min) for UI
-//               double rawSpeed = (data['speed'] as num?)?.toDouble() ?? 0.0;
-//               climbSpeed = (rawSpeed * 60).toInt(); 
-              
-//               // samplee
-//               // 3. Update Resources for Statistics Tab
-//               waterLvl = (data['water_lvl'] as num?)?.toDouble() ?? waterLvl; 
-//               waterUsed = (data['water_used'] as num?)?.toDouble() ?? waterUsed;
-//               energyConsumed = (data['energy'] as num?)?.toDouble() ?? energyConsumed;
-              
-//               // 4. Update UI toggles
-//               String stat = data['status'] ?? 'IDLE';
-//               inMotion = stat == 'NAVIGATING' || stat == 'CLEANING' || climbSpeed > 0;
-//               brush1 = stat == 'CLEANING';
-//               wiper1 = stat == 'CLEANING';
-//               pump = stat == 'CLEANING';
-              
-//               // ── NEW: STABILIZATION PARSING ──
-//               if (data['stabilization'] != null) {
-//                 final stab = data['stabilization'];
-//                 chamberA = (stab['chamber_a'] as num?)?.toInt() ?? chamberA;
-//                 chamberB = (stab['chamber_b'] as num?)?.toInt() ?? chamberB;
-//                 thrusterDc1 = (stab['thrust_1'] as num?)?.toInt() ?? thrusterDc1;
-//                 thrusterDc2 = (stab['thrust_2'] as num?)?.toInt() ?? thrusterDc2;
-//                 impellerDc1 = (stab['impel_1'] as num?)?.toInt() ?? impellerDc1;
-//                 impellerDc2 = (stab['impel_2'] as num?)?.toInt() ?? impellerDc2;
-//                 stabLatched = (stab['stab_latched'] as bool?) ?? stabLatched;
-//               }
-//               _recordHistoryPoint();
-//               _safeNotify();
-//             } catch (e) {
-//               debugPrint("JSON Parse Error: $e");
-//             }
-//           }
-//         }
-//       });
-//     } catch (e) {
-//       String errStr = e.toString().replaceAll('SocketException:', '').trim();
-//       if (errStr.length > 20) errStr = errStr.substring(0, 20); 
-//       connectionStatus = 'ERR: $errStr';
-//       statusColor = AppTheme.red;
-//       _safeNotify();
-//     }
-//   }
-
-//   void _parseNamedValueFloat(List<int> payload) {
-//     List<int> paddedPayload = List<int>.from(payload);
-//     while (paddedPayload.length < 18) {
-//       paddedPayload.add(0);
-//     }
-
-//     ByteData bd = ByteData.view(Uint8List.fromList(paddedPayload).buffer);
-//     double value = bd.getFloat32(4, Endian.little);
-
-//     String name = String.fromCharCodes(
-//       paddedPayload.sublist(8, 18),
-//     ).replaceAll('\x00', '').trim();
-
-//     _lastDataTime = DateTime.now();
-//     if (!isConnected) isConnected = true;
-
-//     switch (name) {
-//       case 'STAB_FLT':
-//         stabFault = value > 0.5;
-//         break;
-//       case 'STAB_LATCH':
-//         stabLatched = value > 0.5;
-//         break;
-//       case 'CHMBR_A_PA':
-//       case 'CHAMB_A':
-//         chamberA = value.toInt();
-//         break;
-//       case 'CHMBR_B_PA':
-//       case 'CHAMB_B':
-//         chamberB = value.toInt();
-//         break;
-//       case 'THRUST_1':
-//       case 'THRST_1':
-//         thrusterDc1 = value.toInt();
-//         break;
-//       case 'THRUST_2':
-//       case 'THRST_2':
-//         thrusterDc2 = value.toInt();
-//         break;
-//       case 'IMPEL_1':
-//         impellerDc1 = value.toInt();
-//         break;
-//       case 'IMPEL_2':
-//         impellerDc2 = value.toInt();
-//         break;
-//       case 'MOTN_FLT':
-//         motionFault = value > 0.5;
-//         break;
-//       case 'MOTION':
-//       case 'MOTN_ACTV':
-//         inMotion = value > 0.5;
-//         break;
-//       case 'CLIMB_MS':
-//       case 'CLIMB_SPD':
-//         climbSpeed = value.toInt();
-//         break;
-//       case 'ALTITUDE':
-//       case 'ALT':
-//         altitude = value.toInt();
-//         break;
-//       case 'CAPSTAN':
-//       case 'CAPSTN_FLT':
-//         capstanFault = value < 0.5;
-//         break;
-//       case 'RC_FLT':
-//         rcFault = value > 0.5;
-//         break;
-//       case 'RC_CONN':
-//         rcConnected = value > 0.5;
-//         break;
-//       case 'PWR_FLT':
-//         powerFault = value > 0.5;
-//         break;
-//       case 'PWR_AC':
-//         acSupply = value > 0.5;
-//         break;
-//       case 'BUS_48_FLT':
-//         bus48vFault = value > 0.5;
-//         break;
-//       case 'BUS_24_FLT':
-//         bus24vFault = value > 0.5;
-//         break;
-//       case 'BUS_12_FLT':
-//         bus12vFault = value > 0.5;
-//         break;
-//       case 'BUS_8_FLT':
-//         bus8vFault = value > 0.5;
-//         break;
-//       case 'BATT_V':
-//         batteryPct = (((value - 10.5) / 2.1) * 100).clamp(0, 100).toInt();
-//         break;
-//       case 'BATT_PCT':
-//         batteryPct = value.toInt();
-//         break;
-//       case 'BRUSH_1':
-//         brush1 = value > 0.5;
-//         break;
-//       case 'BRUSH_2':
-//         brush2 = value > 0.5;
-//         break;
-//       case 'WIPER_1':
-//         wiper1 = value > 0.5;
-//         break;
-//       case 'WIPER_2':
-//         wiper2 = value > 0.5;
-//         break;
-//       case 'PUMP':
-//         pump = value > 0.5;
-//         break;
-//       case 'WATER_LVL':
-//         waterLvl = value;
-//         break;
-//       case 'WATER_USD':
-//         waterUsed = value;
-//         break;
-//       case 'ENERGY_KWH':
-//         energyConsumed = value;
-//         break;
-//       case 'AREA_SQFT':
-//         areaCleaned = value;
-//         break;
-//     }
-//     _safeNotify();
-//   }
-
-//   void _safeNotify() {
-//     if (!_isDisposed) notifyListeners();
-//   }
-
-//   void _simulateData() {
-//     robotX += 0.5;
-//     if (robotX > 100) {
-//       robotX = 0;
-//       robotY += 5;
-//     }
-
-//     batteryLevel -= 0.1;
-//     waterLevel -= 0.2;
-
-//     notifyListeners();
-//   }
-// }
-
-// // ═════════════════════════════════════════════════════════════════════════════
-// // TACTICAL DASHBOARD UI 
-// // ═════════════════════════════════════════════════════════════════════════════
-// class TelemetrySection extends StatelessWidget {
-//   final Task task;
-//   final bool isWide;
-//   final WiperTelemetry telemetry;
-
-//   const TelemetrySection({
-//     super.key,
-//     required this.task,
-//     required this.isWide,
-//     required this.telemetry,
-//   });
-
-//   String _formatCompact(int val) {
-//     String s = val.toString();
-//     if (s.length > 4) {
-//       if (val > 9999) return '${val ~/ 1000}k';
-//       if (val < -999) return '${val ~/ 1000}k';
-//     }
-//     return s;
-//   }
-
-//   Widget _buildGroupBox(Widget child) {
-//     return Container(
-//       width: double.infinity,
-//       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-//       decoration: BoxDecoration(
-//         color: AppTheme.bgCard,
-//         borderRadius: BorderRadius.circular(8),
-//         border: Border.all(color: AppTheme.borderDim),
-//       ),
-//       child: child,
-//     );
-//   }
-
-//   Widget _buildGroupHeader(
-//     String title,
-//     bool isConnected,
-//     bool? isFault,
-//     String? badgeLabel,
-//     Color? badgeColor,
-//   ) {
-//     Color headerColor = AppTheme.textMid;
-//     if (isConnected) {
-//       if (isFault == null) {
-//         headerColor = AppTheme.cyan;
-//       } else {
-//         headerColor = isFault ? AppTheme.red : AppTheme.green;
-//       }
-//     }
-
-//     return Padding(
-//       padding: const EdgeInsets.only(top: 2, bottom: 3),
-//       child: Row(
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Text(
-//             title.toUpperCase(),
-//             style: GoogleFonts.jetBrainsMono(
-//               fontSize: 10,
-//               fontWeight: FontWeight.w800,
-//               color: headerColor,
-//               letterSpacing: 0.5,
-//             ),
-//           ),
-//           if (badgeLabel != null && badgeColor != null) ...[
-//             const SizedBox(width: 8),
-//             StatusBadge(label: badgeLabel, color: badgeColor),
-//           ],
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildPowerGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'Power System',
-//           t.isConnected,
-//           t.powerFault,
-//           t.acSupply ? 'AC SUPPLY' : 'BATTERY',
-//           t.acSupply ? AppTheme.cyan : AppTheme.amber,
-//         ),
-//         _buildGroupBox(
-//           Wrap(
-//             spacing: 12,
-//             runSpacing: 10,
-//             children: [
-//               InnerStatusTile(
-//                 label: '48V BUS',
-//                 status: t.bus48vFault ? 'FAULT' : 'OK',
-//                 icon: Icons.electrical_services_rounded,
-//                 color: t.bus48vFault ? AppTheme.red : AppTheme.green,
-//               ),
-//               InnerStatusTile(
-//                 label: '24V BUS',
-//                 status: t.bus24vFault ? 'FAULT' : 'OK',
-//                 icon: Icons.electrical_services_rounded,
-//                 color: t.bus24vFault ? AppTheme.red : AppTheme.green,
-//               ),
-//               InnerStatusTile(
-//                 label: '12V BUS',
-//                 status: t.bus12vFault ? 'FAULT' : 'OK',
-//                 icon: Icons.electrical_services_rounded,
-//                 color: t.bus12vFault ? AppTheme.red : AppTheme.green,
-//               ),
-//               InnerStatusTile(
-//                 label: '8V BUS',
-//                 status: t.bus8vFault ? 'FAULT' : 'OK',
-//                 icon: Icons.electrical_services_rounded,
-//                 color: t.bus8vFault ? AppTheme.red : AppTheme.green,
-//               ),
-//               InnerTeleTile(
-//                 label: 'BATTERY',
-//                 value: '${t.batteryPct}',
-//                 unit: '%',
-//                 icon: Icons.battery_charging_full_rounded,
-//                 color: t.batteryPct < 20 ? AppTheme.red : AppTheme.green,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildAlertsGroup(Task task, WiperTelemetry t) {
-//     final hasAlerts = task.alerts.isNotEmpty;
-//     final latestAlert = hasAlerts ? task.alerts.last : null;
-//     final isCritical = latestAlert?.type == 'CRITICAL';
-
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'System Alerts',
-//           t.isConnected,
-//           hasAlerts ? true : false,
-//           hasAlerts ? 'ACTIVE' : 'CLEAR',
-//           hasAlerts
-//               ? (isCritical ? AppTheme.red : AppTheme.amber)
-//               : AppTheme.green,
-//         ),
-//         _buildGroupBox(
-//           Container(
-//             width: double.infinity,
-//             constraints: const BoxConstraints(minHeight: 70),
-//             child: hasAlerts
-//                 ? Column(
-//                     crossAxisAlignment: CrossAxisAlignment.start,
-//                     mainAxisAlignment: MainAxisAlignment.center,
-//                     children: [
-//                       Row(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Icon(
-//                             isCritical
-//                                 ? Icons.warning_rounded
-//                                 : Icons.info_outline,
-//                             color: isCritical ? AppTheme.red : AppTheme.amber,
-//                             size: 16,
-//                           ),
-//                           const SizedBox(width: 8),
-//                           Expanded(
-//                             child: Text(
-//                               latestAlert!.message ?? 'Unknown Alert',
-//                               style: GoogleFonts.jetBrainsMono(
-//                                 color: AppTheme.textHi,
-//                                 fontSize: 11,
-//                                 fontWeight: FontWeight.bold,
-//                               ),
-//                               maxLines: 2,
-//                               overflow: TextOverflow.ellipsis,
-//                             ),
-//                           ),
-//                         ],
-//                       ),
-//                       const SizedBox(height: 8),
-//                       Text(
-//                         'TIME: ${latestAlert.timestamp.toString().split('.')[0]}',
-//                         style: GoogleFonts.jetBrainsMono(
-//                           color: AppTheme.textLo,
-//                           fontSize: 9,
-//                         ),
-//                       ),
-//                     ],
-//                   )
-//                 : Center(
-//                     child: Text(
-//                       'NO ACTIVE ALERTS',
-//                       style: GoogleFonts.jetBrainsMono(
-//                         color: AppTheme.textLo,
-//                         fontSize: 11,
-//                         fontWeight: FontWeight.w600,
-//                         letterSpacing: 1.0,
-//                       ),
-//                     ),
-//                   ),
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildStabGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'Stabilization System',
-//           t.isConnected,
-//           t.stabFault,
-//           t.stabLatched ? 'LATCHED' : 'UNLATCHED',
-//           t.stabLatched ? AppTheme.green : AppTheme.amber,
-//         ),
-//         _buildGroupBox(
-//           Wrap(
-//             spacing: 12,
-//             runSpacing: 10,
-//             children: [
-//               InnerTeleTile(
-//                 label: 'CHAMBER A',
-//                 value: _formatCompact(t.chamberA),
-//                 unit: 'HPa',
-//                 icon: Icons.compress_rounded,
-//                 color: AppTheme.cyan,
-//               ),
-//               InnerTeleTile(
-//                 label: 'CHAMBER B',
-//                 value: _formatCompact(t.chamberB),
-//                 unit: 'HPa',
-//                 icon: Icons.compress_rounded,
-//                 color: AppTheme.cyan,
-//               ),
-//               InnerTeleTile(
-//                 label: 'THRUST 1',
-//                 value: _formatCompact(t.thrusterDc1),
-//                 unit: '%',
-//                 icon: Icons.cyclone_rounded,
-//                 color: AppTheme.textMid,
-//               ),
-//               InnerTeleTile(
-//                 label: 'THRUST 2',
-//                 value: _formatCompact(t.thrusterDc2),
-//                 unit: '%',
-//                 icon: Icons.cyclone_rounded,
-//                 color: AppTheme.textMid,
-//               ),
-//               InnerTeleTile(
-//                 label: 'IMPEL 1',
-//                 value: _formatCompact(t.impellerDc1),
-//                 unit: '%',
-//                 icon: Icons.heat_pump,
-//                 color: AppTheme.textMid,
-//               ),
-//               InnerTeleTile(
-//                 label: 'IMPEL 2',
-//                 value: _formatCompact(t.impellerDc2),
-//                 unit: '%',
-//                 icon: Icons.heat_pump,
-//                 color: AppTheme.textMid,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildMotionGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'Motion Control',
-//           t.isConnected,
-//           t.motionFault,
-//           t.inMotion ? 'IN MOTION' : 'IDLE',
-//           t.inMotion ? AppTheme.cyan : AppTheme.textHi,
-//         ),
-//         _buildGroupBox(
-//           Row(
-//             children: [
-//               InnerTeleTile(
-//                 label: 'CLIMB SPD',
-//                 value: '${t.climbSpeed}',
-//                 unit: 'm/m',
-//                 icon: Icons.speed_rounded,
-//                 color: AppTheme.cyan,
-//               ),
-//               const SizedBox(width: 12),
-//               InnerTeleTile(
-//                 label: 'Altitude',
-//                 value: '${t.altitude}',
-//                 unit: 'meters',
-//                 icon: Icons.speed_rounded,
-//                 color: AppTheme.cyan,
-//               ),
-//               const Spacer(),
-//               InnerStatusTile(
-//                 label: 'CAPSTAN',
-//                 status: t.capstanFault ? 'FAULT' : 'OK',
-//                 icon: Icons.settings_rounded,
-//                 color: t.capstanFault ? AppTheme.red : AppTheme.green,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildRcGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'Remote Control',
-//           t.isConnected,
-//           t.rcFault,
-//           null,
-//           null,
-//         ),
-//         _buildGroupBox(
-//           Wrap(
-//             spacing: 12,
-//             runSpacing: 10,
-//             children: [
-//               InnerStatusTile(
-//                 label: 'RC LINK',
-//                 status: t.rcConnected ? 'CONN' : 'DISC',
-//                 icon: Icons.settings_remote_rounded,
-//                 color: t.rcConnected ? AppTheme.green : AppTheme.textLo,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildCleaningGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader('Cleaning Subs', t.isConnected, null, null, null),
-//         _buildGroupBox(
-//           Wrap(
-//             spacing: 12,
-//             runSpacing: 10,
-//             children: [
-//               InnerStatusTile(
-//                 label: 'BRUSH 1',
-//                 status: t.brush1 ? 'RUN' : 'OFF',
-//                 icon: Icons.change_circle_outlined,
-//                 color: t.brush1 ? AppTheme.cyan : AppTheme.textHi,
-//               ),
-//               InnerStatusTile(
-//                 label: 'BRUSH 2',
-//                 status: t.brush2 ? 'RUN' : 'OFF',
-//                 icon: Icons.change_circle_outlined,
-//                 color: t.brush2 ? AppTheme.cyan : AppTheme.textHi,
-//               ),
-//               InnerStatusTile(
-//                 label: 'WIPER 1',
-//                 status: t.wiper1 ? 'RUN' : 'OFF',
-//                 icon: Icons.change_circle_outlined,
-//                 color: t.wiper1 ? AppTheme.cyan : AppTheme.textHi,
-//               ),
-//               InnerStatusTile(
-//                 label: 'WIPER 2',
-//                 status: t.wiper2 ? 'RUN' : 'OFF',
-//                 icon: Icons.change_circle_outlined,
-//                 color: t.wiper2 ? AppTheme.cyan : AppTheme.textHi,
-//               ),
-//               InnerStatusTile(
-//                 label: 'PUMP',
-//                 status: t.pump ? 'ON' : 'OFF',
-//                 icon: Icons.water_rounded,
-//                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
-//               ),
-              
-//               InnerStatusTile(
-//                 label: 'WATER LVL',
-//                 status: '${t.waterLvl.toStringAsFixed(1)} L',
-//                 icon: Icons.water_drop_rounded,
-//                 color: t.waterLvl < 5.0 ? AppTheme.red : AppTheme.cyan,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   Widget _buildStatisticsGroup(WiperTelemetry t) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         _buildGroupHeader(
-//           'Cleaning Statistics',
-//           t.isConnected,
-//           null,
-//           null,
-//           null,
-//         ),
-//         _buildGroupBox(
-//           Wrap(
-//             spacing: 20,
-//             runSpacing: 10,
-//             children: [
-//               InnerTeleTile(
-//                 label: 'WATER USED',
-//                 value: t.waterUsed.toStringAsFixed(1),
-//                 unit: 'L',
-//                 icon: Icons.water_drop_rounded,
-//                 color: AppTheme.cyan,
-//               ),
-//               InnerTeleTile(
-//                 label: 'AREA CLEANED',
-//                 value: t.areaCleaned.toStringAsFixed(1),
-//                 unit: 'm2',
-//                 icon: Icons.square_foot_rounded,
-//                 color: AppTheme.green,
-//               ),
-//               InnerTeleTile(
-//                 label: 'ENERGY CONSUMED',
-//                 value: t.energyConsumed.toStringAsFixed(1),
-//                 unit: 'kWh',
-//                 icon: Icons.bolt_rounded,
-//                 color: AppTheme.amber,
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final pad = AppTheme.screenPad(context);
-
-//     return AnimatedBuilder(
-//       animation: telemetry,
-//       builder: (context, _) {
-//         final t = telemetry;
-
-//         return SingleChildScrollView(
-//           padding: EdgeInsets.symmetric(horizontal: pad, vertical: 8),
-//           child: Column(
-//             crossAxisAlignment: CrossAxisAlignment.start,
-//             children: [
-//               Row(
-//                 mainAxisAlignment: MainAxisAlignment.end,
-//                 children: [
-//                   StatusBadge(
-//                     label: 'LINK: ${t.connectionStatus}',
-//                     color: t.statusColor,
-//                   ),
-//                 ],
-//               ),
-//               const SizedBox(height: 4),
-
-//               Row(
-//                 crossAxisAlignment: CrossAxisAlignment.start,
-//                 children: [
-//                   Expanded(child: _buildPowerGroup(t)),
-//                   const SizedBox(width: 10),
-//                   Expanded(child: _buildAlertsGroup(task, t)),
-//                 ],
-//               ),
-//               const SizedBox(height: 10),
-
-//               Row(
-//                 crossAxisAlignment: CrossAxisAlignment.start,
-//                 children: [
-//                   Expanded(
-//                     child: Column(
-//                       crossAxisAlignment: CrossAxisAlignment.start,
-//                       children: [
-//                         _buildStabGroup(t),
-//                         const SizedBox(height: 4),
-//                         _buildCleaningGroup(t),
-//                       ],
-//                     ),
-//                   ),
-//                   const SizedBox(width: 10),
-//                   Expanded(
-//                     child: Column(
-//                       crossAxisAlignment: CrossAxisAlignment.start,
-//                       children: [
-//                         _buildMotionGroup(t),
-//                         const SizedBox(height: 10),
-//                         _buildRcGroup(t),
-//                       ],
-//                     ),
-//                   ),
-//                 ],
-//               ),
-//               const SizedBox(height: 24),
-//             ],
-//           ),
-//         );
-//       },
-//     );
-//   }
-// }
-
-// // ═════════════════════════════════════════════════════════════════════════════
-// // INNER TILES
-// // ═════════════════════════════════════════════════════════════════════════════
-// class InnerTeleTile extends StatelessWidget {
-//   final String label, value, unit;
-//   final IconData icon;
-//   final Color color;
-
-//   const InnerTeleTile({
-//     super.key,
-//     required this.label,
-//     required this.value,
-//     required this.unit,
-//     required this.icon,
-//     required this.color,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       mainAxisSize: MainAxisSize.min,
-//       children: [
-//         Row(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Icon(icon, size: 9, color: color),
-//             const SizedBox(width: 4),
-//             Text(
-//               label,
-//               style: GoogleFonts.jetBrainsMono(
-//                 fontSize: 8,
-//                 color: AppTheme.textHi,
-//                 letterSpacing: 0.5,
-//                 fontWeight: FontWeight.w700,
-//               ),
-//             ),
-//           ],
-//         ),
-//         const SizedBox(height: 2),
-//         GcsMonoValue(value: value, unit: unit, color: color, fontSize: 16),
-//       ],
-//     );
-//   }
-// }
-
-// class MicroTeleTile extends StatelessWidget {
-//   final String label, value, unit;
-//   final IconData icon;
-//   final Color color;
-
-//   const MicroTeleTile({
-//     super.key,
-//     required this.label,
-//     required this.value,
-//     required this.unit,
-//     required this.icon,
-//     required this.color,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-//       decoration: BoxDecoration(
-//         color: AppTheme.bgCard,
-//         borderRadius: BorderRadius.circular(6),
-//         border: Border.all(color: AppTheme.borderDim),
-//       ),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Row(
-//             mainAxisSize: MainAxisSize.min,
-//             children: [
-//               Icon(icon, size: 9, color: color),
-//               const SizedBox(width: 4),
-//               Text(
-//                 label,
-//                 style: GoogleFonts.jetBrainsMono(
-//                   fontSize: 8,
-//                   color: AppTheme.textHi,
-//                   letterSpacing: 0.5,
-//                 ),
-//               ),
-//             ],
-//           ),
-//           const SizedBox(height: 2),
-//           GcsMonoValue(value: value, unit: unit, color: color, fontSize: 16),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-// class InnerStatusTile extends StatelessWidget {
-//   final String label, status;
-//   final IconData icon;
-//   final Color color;
-
-//   const InnerStatusTile({
-//     super.key,
-//     required this.label,
-//     required this.status,
-//     required this.icon,
-//     required this.color,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       mainAxisSize: MainAxisSize.min,
-//       children: [
-//         Row(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Icon(icon, size: 9, color: color),
-//             const SizedBox(width: 4),
-//             Text(
-//               label,
-//               style: GoogleFonts.jetBrainsMono(
-//                 fontSize: 8,
-//                 color: AppTheme.textHi,
-//                 letterSpacing: 0.5,
-//                 fontWeight: FontWeight.w700,
-//               ),
-//             ),
-//           ],
-//         ),
-//         const SizedBox(height: 2),
-//         Text(
-//           status,
-//           style: GoogleFonts.barlowCondensed(
-//             fontSize: 16,
-//             fontWeight: FontWeight.w700,
-//             color: color,
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-// }
-
-
-
-
-
-
-
-
+// MOCK DATA CODE:
 
 import 'dart:async';
 import 'dart:convert';
@@ -1191,18 +14,89 @@ import '../../../core/models/task.dart';
 import '../../../core/services/link_manager.dart';
 import '../../../ui/app_theme.dart';
 import '../../../ui/gcs_widgets.dart';
+import 'package:fl_chart/fl_chart.dart';
+
+// for csv file
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TELEMETRY STATE MANAGER
 // ═════════════════════════════════════════════════════════════════════════════
+
+// for csv file:
+class TelemetrySample {
+  final DateTime time;
+  final String status;
+  final double altitude, climbSpeed, x, y;
+  final int battery,stabLatched, chamberA, chamberB, thrust1, thrust2, impel1, impel2,brush1, brush2, wiper1, wiper2, pump;
+  final double waterLvl, waterUsed, energy, area;
+
+  TelemetrySample({
+    required this.time,
+    required this.status,
+    required this.altitude,
+    required this.climbSpeed,
+    required this.x,
+    required this.y,
+    required this.battery,
+    required this.stabLatched,
+    required this.chamberA,
+    required this.chamberB,
+    required this.thrust1,
+    required this.thrust2,
+    required this.impel1,
+    required this.impel2,
+    required this.waterLvl,
+    required this.waterUsed,
+    required this.energy,
+    required this.area,
+    required this.brush1,
+    required this.brush2,
+    required this.wiper1,
+    required this.wiper2,
+    required this.pump,
+  });
+
+  static const header =
+      'timestamp,status,altitude_m,climb_speed_mpm,pos_x,pos_y,battery_pct,'
+      'stab_Latched,chamber_a_hpa,chamber_b_hpa,thrust_1_pct,thrust_2_pct,impel_1_pct,impel_2_pct,brush_1,brush_2,wiper_1,wiper_2,pump,'
+      'water_lvl_l,water_used_l,energy_kwh,area_m2';
+
+  String toCsvRow() => [
+        time.toUtc().toIso8601String(),
+        status,
+        altitude,
+        climbSpeed,
+        x.toStringAsFixed(3),
+        y.toStringAsFixed(3),
+        battery,
+        stabLatched,
+        chamberA,
+        chamberB,
+        thrust1,
+        thrust2,
+        impel1,
+        impel2,
+        brush1,
+        brush2,
+        wiper1,
+        wiper2,
+        pump,
+        waterLvl.toStringAsFixed(4),
+        waterUsed.toStringAsFixed(4),
+        energy.toStringAsFixed(4),
+        area.toStringAsFixed(2),
+      ].join(',');
+}
+
+
 class WiperTelemetry extends ChangeNotifier {
   UsbPort? _usbPort;
   SerialPort? _desktopPort;
   RawDatagramSocket? _udpSocket;
   StreamSubscription<UsbEvent>? _usbEventSub;
   Timer? _watchdog;
-  // pop up msg for connecting with air unit
-  VoidCallback? onAirUnitLinked;
 
   String connectionStatus = 'INITIALIZING...';
   Color statusColor = AppTheme.amber;
@@ -1247,14 +141,102 @@ class WiperTelemetry extends ChangeNotifier {
   bool wiper2 = false;
   bool pump = false;
   double waterLvl = 0.0;
-  // water tank
-  double pumpLpm = 0.0;
-  double tankVol = 0.0;
 
   // ── STATISTICS DATA ──
   double waterUsed = 0.0;
   double energyConsumed = 0.0;
   double areaCleaned = 0.0;
+
+  // Chart tracking
+  DateTime? _sessionStart;
+  final List<FlSpot> waterHistory = [];
+  final List<FlSpot> areaHistory = [];
+  final List<FlSpot> energyHistory = [];
+
+  void _recordHistoryPoint() {
+    _sessionStart ??= DateTime.now();
+    final hoursElapsed =
+        DateTime.now().difference(_sessionStart!).inSeconds / 3600.0;
+
+    waterHistory.add(FlSpot(hoursElapsed, waterUsed));
+    areaHistory.add(FlSpot(hoursElapsed, areaCleaned));
+    energyHistory.add(FlSpot(hoursElapsed, energyConsumed));
+  }
+
+  // for csv file:
+  // ── CSV LOGGING (static so Settings screen can export it) ──
+  static final List<TelemetrySample> samples = [];
+  String currentStatus = 'IDLE';
+  DateTime _lastSampleTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static const int _sampleIntervalMs = 1000;
+  static const int _maxSamples = 100000;
+
+  void _recordCsvSample() {
+    final now = DateTime.now();
+    if (now.difference(_lastSampleTime).inMilliseconds < _sampleIntervalMs) return;
+    _lastSampleTime = now;
+
+    if (samples.length >= _maxSamples) samples.removeAt(0);
+    samples.add(TelemetrySample(
+      time: now,
+      status: currentStatus,
+      altitude: altitude.toDouble(),
+      climbSpeed: climbSpeed.toDouble(),
+      x: robotX,
+      y: robotY,
+      battery: batteryPct,
+      chamberA: chamberA,
+      chamberB: chamberB,
+      thrust1: thrusterDc1,
+      thrust2: thrusterDc2,
+      impel1: impellerDc1,
+      impel2: impellerDc2,
+      stabLatched: stabLatched ? 1 : 0,
+      brush1: brush1 ? 1 : 0,
+      brush2: brush2 ? 1 : 0,
+      wiper1: wiper1 ? 1 : 0,
+      wiper2: wiper2 ? 1 : 0,
+      pump: pump ? 1 : 0,
+      waterLvl: waterLvl,
+      waterUsed: waterUsed,
+      energy: energyConsumed,
+      area: areaCleaned,
+    ));
+  }
+
+  static String buildCsv() {
+    final sb = StringBuffer()..writeln(TelemetrySample.header);
+    for (final s in samples) {
+      sb.writeln(s.toCsvRow());
+    }
+    return sb.toString();
+  }
+
+  static void clearSamples() => samples.clear();
+
+  /// Returns true if a file was shared, false if there was nothing to export.
+  static Future<bool> shareSensoryDataCsv() async {
+    if (samples.isEmpty) return false;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .split('.')[0]
+          .replaceAll(':', '-');
+      final file = File('${dir.path}/vivid_telemetry_$stamp.csv');
+      await file.writeAsString(buildCsv());
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        text: 'Virtual Twin Telemetry Export',
+        subject: 'Vivid GCS Sensor Data',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Export failed: $e');
+      return false;
+    }
+  }
 
   // NEW: Variables for Digital Twin & TTS
   double robotX = 0.0;
@@ -1263,8 +245,6 @@ class WiperTelemetry extends ChangeNotifier {
   double waterLevel = 100.0;
 
   final List<int> _buffer = [];
-
-  
 
   void initConnection() {
     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -1285,7 +265,7 @@ class WiperTelemetry extends ChangeNotifier {
         LinkManager.selectedUsbDevice!,
         LinkManager.selectedBaudRate,
       ).then((success) {
-        if (!success) _startAirUnitUdp(); // 👉 RESTORED
+        if (!success) _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
       });
     } else if ((Platform.isWindows || Platform.isLinux) &&
         LinkManager.selectedDesktopPort != null) {
@@ -1293,17 +273,11 @@ class WiperTelemetry extends ChangeNotifier {
         LinkManager.selectedDesktopPort!,
         LinkManager.selectedBaudRate,
       ).then((success) {
-        if (!success) _startAirUnitUdp(); // 👉 RESTORED
+        if (!success) _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
       });
     } else {
-      _startAirUnitUdp(); // 👉 RESTORED
+      _startMockJsonUdp(); // CHANGED FROM _startAirUnitUdp()
     }
-  }
-
-  void _closeUsbAndFallbackToAirUnit() {
-    _usbPort?.close();
-    _usbPort = null;
-    _startAirUnitUdp(); // 👉 RESTORED
   }
 
   void disposeConnection() {
@@ -1388,7 +362,6 @@ class WiperTelemetry extends ChangeNotifier {
 
         connectionStatus = 'MK32 USB: $baud BAUD';
         statusColor = AppTheme.green;
-
         _safeNotify();
 
         _usbPort!.inputStream!.listen((Uint8List data) {
@@ -1396,118 +369,23 @@ class WiperTelemetry extends ChangeNotifier {
         });
         return true;
       }
-      // air unit
-      else{
-        debugPrint("USB Port failed to open. Permission denied or device busy.");
-        connectionStatus = 'USB PORT FAILED/BUSY';
-        statusColor = AppTheme.red;
-        _safeNotify();
-      }
     } catch (e) {
       debugPrint("USB Serial Error: $e");
     }
     return false;
   }
 
-  // void _processMavlinkBytes(Uint8List data) {
-  //   debugPrint("RAW BYTES RECEIVED: ${data.length} -> $data");
-  //   _buffer.addAll(data);
-
-  //   while (_buffer.isNotEmpty) {
-  //     int magic = _buffer[0];
-
-  //     if (magic != 0xFD && magic != 0xFE) {
-  //       _buffer.removeAt(0);
-  //       continue;
-  //     }
-
-  //     if (magic == 0xFE) {
-  //       if (_buffer.length < 6) break;
-  //       int payloadLen = _buffer[1];
-  //       int frameLen = 8 + payloadLen;
-
-  //       if (frameLen > 280) {
-  //         _buffer.removeAt(0);
-  //         continue;
-  //       }
-  //       if (_buffer.length < frameLen) break;
-
-  //       int msgId = _buffer[5];
-  //       if (msgId == 251) {
-  //         try {
-  //           _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
-  //         } catch (e) {
-  //           debugPrint("MAVLink v1 Parse Error: $e");
-  //         }
-  //       }
-  //       _buffer.removeRange(0, frameLen);
-  //     } else if (magic == 0xFD) {
-  //       if (_buffer.length < 10) break;
-  //       int payloadLen = _buffer[1];
-  //       int incompatFlags = _buffer[2];
-  //       bool hasSignature = (incompatFlags & 0x01) != 0;
-  //       int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
-
-  //       if (frameLen > 280) {
-  //         _buffer.removeAt(0);
-  //         continue;
-  //       }
-  //       if (_buffer.length < frameLen) break;
-
-  //       int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
-  //       if (msgId == 251) {
-  //         try {
-  //           _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
-  //         } catch (e) {
-  //           debugPrint("MAVLink v2 Parse Error: $e");
-  //         }
-  //       }
-  //       _buffer.removeRange(0, frameLen);
-  //     }
-  //   }
-  // }
-
-  Future<void> _startAirUnitUdp() async {
-    connectionStatus = 'SEARCHING UDP...';
-    statusColor = AppTheme.amber;
-    _safeNotify();
-
-    try {
-      // 👉 Restored physical robot port 14550
-      _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 14550);
-      _udpSocket!.listen((RawSocketEvent event) {
-        if (event == RawSocketEvent.read) {
-          Datagram? dg = _udpSocket!.receive();
-          if (dg != null) {
-            if (!connectionStatus.contains('AIR UNIT')) {
-              connectionStatus = 'AIR UNIT LINKED';
-              statusColor = AppTheme.cyan;
-              _safeNotify();
-            }
-            // 👉 Routes binary data to the real MAVLink parser
-            _processMavlinkBytes(dg.data); 
-          }
-        }
-      });
-    } catch (e) {
-      connectionStatus = 'UDP PORT BUSY';
-      statusColor = AppTheme.red;
-      _safeNotify();
-    }
-  }
-    void _processMavlinkBytes(Uint8List data) {
+  void _processMavlinkBytes(Uint8List data) {
     _buffer.addAll(data);
 
     while (_buffer.isNotEmpty) {
       int magic = _buffer[0];
 
-      // Discard non-MAVLink bytes one by one
       if (magic != 0xFD && magic != 0xFE) {
         _buffer.removeAt(0);
         continue;
       }
 
-      // ── MAVLink v1.0 Header ──
       if (magic == 0xFE) {
         if (_buffer.length < 6) break;
         int payloadLen = _buffer[1];
@@ -1526,19 +404,9 @@ class WiperTelemetry extends ChangeNotifier {
           } catch (e) {
             debugPrint("MAVLink v1 Parse Error: $e");
           }
-          _buffer.removeRange(0, frameLen);
-        } else if (msgId == 0) {
-          // Heartbeat
-          _lastDataTime = DateTime.now();
-          if (!isConnected) isConnected = true;
-          _buffer.removeRange(0, frameLen);
-        } else {
-          // 👉 FIX 1: Safely skip the entire unrecognized packet
-          _buffer.removeRange(0, frameLen);
         }
-      }
-      // ── MAVLink v2.0 Header ──
-      else if (magic == 0xFD) {
+        _buffer.removeRange(0, frameLen);
+      } else if (magic == 0xFD) {
         if (_buffer.length < 10) break;
         int payloadLen = _buffer[1];
         int incompatFlags = _buffer[2];
@@ -1558,94 +426,115 @@ class WiperTelemetry extends ChangeNotifier {
           } catch (e) {
             debugPrint("MAVLink v2 Parse Error: $e");
           }
-          _buffer.removeRange(0, frameLen);
-        } else if (msgId == 0) {
-          // Heartbeat
-          _lastDataTime = DateTime.now();
-          if (!isConnected) isConnected = true;
-          _buffer.removeRange(0, frameLen);
-        } else {
-          // 👉 FIX 2: Safely skip the entire unrecognized packet
-          _buffer.removeRange(0, frameLen);
         }
+        _buffer.removeRange(0, frameLen);
       }
     }
   }
-  
-  // void _processMavlinkBytes(Uint8List data) {
-  //   _buffer.addAll(data);
 
-  //   while (_buffer.isNotEmpty) {
-  //     int magic = _buffer[0];
+  void _closeUsbAndFallbackToAirUnit() {
+    _usbPort?.close();
+    _usbPort = null;
+    _startMockJsonUdp(); 
+  }
 
-  //     // Discard non-MAVLink bytes one by one
-  //     if (magic != 0xFD && magic != 0xFE) {
-  //       _buffer.removeAt(0);
-  //       continue;
-  //     }
+  // ── NEW: MOCK JSON UDP LISTENER (SAFE BIND) ──
+  Future<void> _startMockJsonUdp() async {
+    connectionStatus = 'SEARCHING MOCK UDP...';
+    statusColor = AppTheme.amber;
+    _safeNotify();
 
-  //     // ── MAVLink v1.0 Header ──
-  //     if (magic == 0xFE) {
-  //       if (_buffer.length < 6) break;
-  //       int payloadLen = _buffer[1];
-  //       int frameLen = 8 + payloadLen;
+    _udpSocket?.close();
+    _udpSocket = null;
 
-  //       if (frameLen > 280) {
-  //         _buffer.removeAt(0);
-  //         continue;
-  //       }
-  //       if (_buffer.length < frameLen) break;
+    try {
+      _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 54321);
+      _udpSocket!.listen((RawSocketEvent event) {
+        if (event == RawSocketEvent.read) {
+          Datagram? dg = _udpSocket!.receive();
+          if (dg != null) {
+            if (!connectionStatus.contains(' DATA LINKED')) {
+              connectionStatus = 'DATA LINKED';
+              statusColor = AppTheme.cyan;
+              _safeNotify();
+            }
+            
+            try {
+              String jsonStr = utf8.decode(dg.data);
+              Map<String, dynamic> data = jsonDecode(jsonStr);
+              
+              _lastDataTime = DateTime.now();
+              if (!isConnected) isConnected = true;
 
-  //       int msgId = _buffer[5];
-  //       if (msgId == 251) {
-  //         try {
-  //           _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
-  //         } catch (e) {
-  //           debugPrint("MAVLink v1 Parse Error: $e");
-  //         }
-  //         _buffer.removeRange(0, frameLen);
-  //       } else if (msgId == 0) {
-  //         // Heartbeat
-  //         _lastDataTime = DateTime.now();
-  //         if (!isConnected) isConnected = true;
-  //         _buffer.removeRange(0, frameLen);
-  //       } else {
-  //         _buffer.removeAt(0);
-  //       }
-  //     }
-  //     // ── MAVLink v2.0 Header ──
-  //     else if (magic == 0xFD) {
-  //       if (_buffer.length < 10) break;
-  //       int payloadLen = _buffer[1];
-  //       int incompatFlags = _buffer[2];
-  //       bool hasSignature = (incompatFlags & 0x01) != 0;
-  //       int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
+              // 1. Core Bot Status
+              batteryPct = (data['battery'] as num).toInt();
+              altitude = (data['position']['z'] as num).toInt();
+              robotX = (data['position']['x'] as num).toDouble();
+              robotY = (data['position']['y'] as num).toDouble();
+              
+              // 2. Convert raw speed (m/s) to Climb Speed (m/min) for UI
+              double rawSpeed = (data['speed'] as num?)?.toDouble() ?? 0.0;
+              climbSpeed = (rawSpeed * 60).toInt(); 
+              
+              // samplee
+              // 3. Update Resources for Statistics Tab
+              waterLvl = (data['water_lvl'] as num?)?.toDouble() ?? waterLvl; 
+              waterUsed = (data['water_used'] as num?)?.toDouble() ?? waterUsed;
+              energyConsumed = (data['energy'] as num?)?.toDouble() ?? energyConsumed;
+              
+              // 4. Update UI toggles
+              String stat = data['status'] ?? 'IDLE';
+               // FOR CSV FILE:
+              currentStatus = stat;
+              // inMotion = stat == 'NAVIGATING' || stat == 'CLEANING' || climbSpeed > 0;
+              inMotion = stat == 'CLEANING' || climbSpeed > 0;
+              // FOR CSV FILE:
+              brush1 = stat == 'CLEANING';
+              wiper1 = stat == 'CLEANING';
+              pump = stat == 'CLEANING';
 
-  //       if (frameLen > 280) {
-  //         _buffer.removeAt(0);
-  //         continue;
-  //       }
-  //       if (_buffer.length < frameLen) break;
+              final clean = data['cleaning'];
+              if (clean != null) {
+                brush1 = (clean['brush_1'] as bool?) ?? brush1;
+                brush2 = (clean['brush_2'] as bool?) ?? brush2;
+                wiper1 = (clean['wiper_1'] as bool?) ?? wiper1;
+                wiper2 = (clean['wiper_2'] as bool?) ?? wiper2;
+                pump   = (clean['pump']    as bool?) ?? pump;
+              } else {
+                brush1 = wiper1 = pump = stat == 'CLEANING';
+              }
+              
+              // ── NEW: STABILIZATION PARSING ──
+              if (data['stabilization'] != null) {
+                final stab = data['stabilization'];
+                chamberA = (stab['chamber_a'] as num?)?.toInt() ?? chamberA;
+                chamberB = (stab['chamber_b'] as num?)?.toInt() ?? chamberB;
+                thrusterDc1 = (stab['thrust_1'] as num?)?.toInt() ?? thrusterDc1;
+                thrusterDc2 = (stab['thrust_2'] as num?)?.toInt() ?? thrusterDc2;
+                impellerDc1 = (stab['impel_1'] as num?)?.toInt() ?? impellerDc1;
+                impellerDc2 = (stab['impel_2'] as num?)?.toInt() ?? impellerDc2;
+                stabLatched = (stab['stab_latched'] as bool?) ?? stabLatched;
+              }
+              _recordHistoryPoint();
+              // FOR CSV FILE:
+              _recordCsvSample();
+              _safeNotify();
+            } catch (e) {
+              debugPrint("JSON Parse Error: $e");
+            }
 
-  //       int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
-  //       if (msgId == 251) {
-  //         try {
-  //           _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
-  //         } catch (e) {
-  //           debugPrint("MAVLink v2 Parse Error: $e");
-  //         }
-  //         _buffer.removeRange(0, frameLen);
-  //       } else if (msgId == 0) {
-  //         // Heartbeat
-  //         _lastDataTime = DateTime.now();
-  //         if (!isConnected) isConnected = true;
-  //         _buffer.removeRange(0, frameLen);
-  //       } else {
-  //         _buffer.removeAt(0);
-  //       }
-  //     }
-  //   }
-  // }
+
+          }
+        }
+      });
+    } catch (e) {
+      String errStr = e.toString().replaceAll('SocketException:', '').trim();
+      if (errStr.length > 20) errStr = errStr.substring(0, 20); 
+      connectionStatus = 'ERR: $errStr';
+      statusColor = AppTheme.red;
+      _safeNotify();
+    }
+  }
 
   void _parseNamedValueFloat(List<int> payload) {
     List<int> paddedPayload = List<int>.from(payload);
@@ -1659,18 +548,9 @@ class WiperTelemetry extends ChangeNotifier {
     String name = String.fromCharCodes(
       paddedPayload.sublist(8, 18),
     ).replaceAll('\x00', '').trim();
-// print values in terminal for debugging
-    debugPrint("MAVLINK NVF -> name: '$name' | value: $value"); 
 
     _lastDataTime = DateTime.now();
-    if (!isConnected)
-    {
-       isConnected = true;
-       onAirUnitLinked?.call();
-    }
-
-    // pop up msg for air unit linked
-    
+    if (!isConnected) isConnected = true;
 
     switch (name) {
       case 'STAB_FLT':
@@ -1768,14 +648,6 @@ class WiperTelemetry extends ChangeNotifier {
       case 'WATER_LVL':
         waterLvl = value;
         break;
-        //water tank
-      case 'TANK_VOL':
-      case 'TANK_VOLUME':
-      case 'WATER_VOLUME':
-        tankVol = value;
-        break;
-
-
       case 'WATER_USD':
         waterUsed = value;
         break;
@@ -1786,8 +658,14 @@ class WiperTelemetry extends ChangeNotifier {
         areaCleaned = value;
         break;
     }
+      // for csv file:
+
+    currentStatus = inMotion ? 'IN_MOTION' : 'IDLE';
+    _recordCsvSample();
     _safeNotify();
   }
+  // for csv file:
+
 
   void _safeNotify() {
     if (!_isDisposed) notifyListeners();
@@ -1814,20 +692,12 @@ class TelemetrySection extends StatelessWidget {
   final Task task;
   final bool isWide;
   final WiperTelemetry telemetry;
-  // water tank
-  final double currentTankVolume;
-  final double maxTankVolume;
-  final VoidCallback onRefillTap;
 
   const TelemetrySection({
     super.key,
     required this.task,
     required this.isWide,
     required this.telemetry,
-    // water tank
-    required this.currentTankVolume,
-    required this.maxTankVolume,
-    required this.onRefillTap,
   });
 
   String _formatCompact(int val) {
@@ -2056,28 +926,28 @@ class TelemetrySection extends StatelessWidget {
               InnerTeleTile(
                 label: 'THRUST 1',
                 value: _formatCompact(t.thrusterDc1),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.cyclone_rounded,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'THRUST 2',
                 value: _formatCompact(t.thrusterDc2),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.cyclone_rounded,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'IMPEL 1',
                 value: _formatCompact(t.impellerDc1),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.heat_pump,
                 color: AppTheme.textMid,
               ),
               InnerTeleTile(
                 label: 'IMPEL 2',
                 value: _formatCompact(t.impellerDc2),
-                unit: 'RPM',
+                unit: '%',
                 icon: Icons.heat_pump,
                 color: AppTheme.textMid,
               ),
@@ -2184,15 +1054,15 @@ class TelemetrySection extends StatelessWidget {
               ),
               InnerStatusTile(
                 label: 'WIPER 1',
-                status: t.wiper1 ? 'ENG' : 'OFF',
-                icon: Icons.cleaning_services_rounded,
-                color: t.wiper1 ? AppTheme.green : AppTheme.textHi,
+                status: t.wiper1 ? 'RUN' : 'OFF',
+                icon: Icons.change_circle_outlined,
+                color: t.wiper1 ? AppTheme.cyan : AppTheme.textHi,
               ),
               InnerStatusTile(
                 label: 'WIPER 2',
-                status: t.wiper2 ? 'ENG' : 'OFF',
-                icon: Icons.cleaning_services_rounded,
-                color: t.wiper2 ? AppTheme.green : AppTheme.textHi,
+                status: t.wiper2 ? 'RUN' : 'OFF',
+                icon: Icons.change_circle_outlined,
+                color: t.wiper2 ? AppTheme.cyan : AppTheme.textHi,
               ),
               InnerStatusTile(
                 label: 'PUMP',
@@ -2200,36 +1070,57 @@ class TelemetrySection extends StatelessWidget {
                 icon: Icons.water_rounded,
                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
               ),
-              // water tank
-              GestureDetector(
-                onTap: onRefillTap,
-                behavior: HitTestBehavior.opaque,
-                child: InnerTeleTile(
-                  label: 'TANK (EDIT)',
-                  value: currentTankVolume.toStringAsFixed(1),
-                  unit: 'L',
-                  icon: Icons.edit_rounded,
-                  color: (currentTankVolume / maxTankVolume) < 0.15 ? AppTheme.red : AppTheme.cyan,
-                ),
+              
+              InnerStatusTile(
+                label: 'WATER LVL',
+                status: '${t.waterLvl.toStringAsFixed(1)} L',
+                icon: Icons.water_drop_rounded,
+                color: t.waterLvl < 5.0 ? AppTheme.red : AppTheme.cyan,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatisticsGroup(WiperTelemetry t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildGroupHeader(
+          'Cleaning Statistics',
+          t.isConnected,
+          null,
+          null,
+          null,
+        ),
+        _buildGroupBox(
+          Wrap(
+            spacing: 20,
+            runSpacing: 10,
+            children: [
+              InnerTeleTile(
+                label: 'WATER USED',
+                value: t.waterUsed.toStringAsFixed(1),
+                unit: 'L',
+                icon: Icons.water_drop_rounded,
+                color: AppTheme.cyan,
               ),
               InnerTeleTile(
-                label: 'WATER LVL',
-                value: t.waterLvl.toStringAsFixed(0),
-                unit: '%',
-                icon: Icons.water_drop_rounded,
-                color: t.waterLvl < 20 ? AppTheme.red : AppTheme.cyan,
+                label: 'AREA CLEANED',
+                value: t.areaCleaned.toStringAsFixed(1),
+                unit: 'm2',
+                icon: Icons.square_foot_rounded,
+                color: AppTheme.green,
               ),
-              // GestureDetector(                           
-              //   onTap: onRefillTap,
-              //   behavior: HitTestBehavior.opaque,
-              //   child: InnerTeleTile(
-              //     label: 'TANK (EDIT)',
-              //     value: currentTankVolume.toStringAsFixed(1),
-              //     unit: 'L',
-              //     icon: Icons.edit_rounded,
-              //     color: (currentTankVolume / maxTankVolume) < 0.15 ? AppTheme.red : AppTheme.cyan,
-              //   ),
-              // ),
+              InnerTeleTile(
+                label: 'ENERGY CONSUMED',
+                value: t.energyConsumed.toStringAsFixed(1),
+                unit: 'kWh',
+                icon: Icons.bolt_rounded,
+                color: AppTheme.amber,
+              ),
             ],
           ),
         ),
@@ -2451,5 +1342,1308 @@ class InnerStatusTile extends StatelessWidget {
     );
   }
 }
+
+
+
+
+// AIR UNIT CODE:
+
+
+// import 'dart:async';
+// import 'dart:convert';
+// import 'dart:io';
+// import 'dart:typed_data';
+
+// import 'package:flutter/material.dart';
+// import 'package:flutter_libserialport/flutter_libserialport.dart';
+// import 'package:google_fonts/google_fonts.dart';
+// import 'package:usb_serial/usb_serial.dart';
+
+// import '../../../core/models/task.dart';
+// import '../../../core/services/link_manager.dart';
+// import '../../../ui/app_theme.dart';
+// import '../../../ui/gcs_widgets.dart';
+
+// // ═════════════════════════════════════════════════════════════════════════════
+// // TELEMETRY STATE MANAGER
+// // ═════════════════════════════════════════════════════════════════════════════
+// class WiperTelemetry extends ChangeNotifier {
+//   UsbPort? _usbPort;
+//   SerialPort? _desktopPort;
+//   RawDatagramSocket? _udpSocket;
+//   StreamSubscription<UsbEvent>? _usbEventSub;
+//   Timer? _watchdog;
+//   // pop up msg for connecting with air unit
+//   VoidCallback? onAirUnitLinked;
+
+//   String connectionStatus = 'INITIALIZING...';
+//   Color statusColor = AppTheme.amber;
+//   bool isConnected = false;
+//   DateTime _lastDataTime = DateTime.now();
+//   bool _isDisposed = false;
+
+//   // ── SYSTEM 1: STABILIZATION ──
+//   bool stabFault = false;
+//   bool stabLatched = false;
+//   int chamberA = 0;
+//   int chamberB = 0;
+//   int thrusterDc1 = 0;
+//   int thrusterDc2 = 0;
+//   int impellerDc1 = 0;
+//   int impellerDc2 = 0;
+
+//   // ── SYSTEM 2: MOTION CONTROL ──
+//   bool motionFault = false;
+//   bool inMotion = false;
+//   int climbSpeed = 0;
+//   int altitude = 0;
+//   bool capstanFault = false;
+
+//   // ── SYSTEM 3: REMOTE CONTROL ──
+//   bool rcFault = false;
+//   bool rcConnected = false;
+
+//   // ── SYSTEM 4: POWER SYSTEM ──
+//   bool powerFault = false;
+//   bool acSupply = true;
+//   bool bus48vFault = false;
+//   bool bus24vFault = false;
+//   bool bus12vFault = false;
+//   bool bus8vFault = false;
+//   int batteryPct = 0;
+
+//   // ── SYSTEM 5: CLEANING SUB-SYSTEMS ──
+//   bool brush1 = false;
+//   bool brush2 = false;
+//   bool wiper1 = false;
+//   bool wiper2 = false;
+//   bool pump = false;
+//   double waterLvl = 0.0;
+//   double pumpLpm = 0.0;
+//   int pumpDuty = 0;
+//   // water tank
+//   double tankVol = 0.0;
+
+//   // ── STATISTICS DATA ──
+//   double waterUsed = 0.0;
+//   double energyConsumed = 0.0;
+//   double areaCleaned = 0.0;
+
+//   // NEW: Variables for Digital Twin & TTS
+//   double robotX = 0.0;
+//   double robotY = 0.0;
+//   double batteryLevel = 100.0;
+//   double waterLevel = 100.0;
+
+//   final List<int> _buffer = [];
+
+  
+
+//   void initConnection() {
+//     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) {
+//       if (isConnected &&
+//           DateTime.now().difference(_lastDataTime).inSeconds > 2) {
+//         isConnected = false;
+//         _safeNotify();
+//       }
+//     });
+
+//     if (Platform.isAndroid && LinkManager.selectedUsbDevice != null) {
+//       _usbEventSub = UsbSerial.usbEventStream?.listen((UsbEvent event) {
+//         if (event.event == UsbEvent.ACTION_USB_DETACHED) {
+//           _closeUsbAndFallbackToAirUnit();
+//         }
+//       });
+//       _tryConnectAndroidUsb(
+//         LinkManager.selectedUsbDevice!,
+//         LinkManager.selectedBaudRate,
+//       ).then((success) {
+//         if (!success) _startAirUnitUdp(); // 👉 RESTORED
+//       });
+//     } else if ((Platform.isWindows || Platform.isLinux) &&
+//         LinkManager.selectedDesktopPort != null) {
+//       _tryConnectDesktopSerial(
+//         LinkManager.selectedDesktopPort!,
+//         LinkManager.selectedBaudRate,
+//       ).then((success) {
+//         if (!success) _startAirUnitUdp(); // 👉 RESTORED
+//       });
+//     } else {
+//       _startAirUnitUdp(); // 👉 RESTORED
+//     }
+//   }
+
+//   void _closeUsbAndFallbackToAirUnit() {
+//     _usbPort?.close();
+//     _usbPort = null;
+//     _startAirUnitUdp(); // 👉 RESTORED
+//   }
+
+//   void disposeConnection() {
+//     _isDisposed = true;
+//     _usbPort?.close();
+//     if (_desktopPort != null && _desktopPort!.isOpen) _desktopPort!.close();
+//     _udpSocket?.close();
+//     _usbEventSub?.cancel();
+//     _watchdog?.cancel();
+//   }
+
+//   Future<bool> _tryConnectDesktopSerial(String portName, int baud) async {
+//     try {
+//       _desktopPort = SerialPort(portName);
+//       if (_desktopPort!.openReadWrite()) {
+//         _udpSocket?.close();
+//         _udpSocket = null;
+
+//         await Future.delayed(const Duration(milliseconds: 250));
+
+//         try {
+//           SerialPortConfig config = _desktopPort!.config;
+//           config.baudRate = baud;
+//           config.bits = 8;
+//           config.stopBits = 1;
+//           config.parity = SerialPortParity.none;
+//           config.setFlowControl(SerialPortFlowControl.none);
+
+//           config.dtr = 1;
+//           config.rts = 1;
+
+//           _desktopPort!.config = config;
+//         } catch (configError) {
+//           debugPrint("Serial Config Note: $configError");
+//         }
+
+//         connectionStatus = 'DESKTOP USB: $portName @ $baud BAUD';
+//         statusColor = AppTheme.green;
+//         _safeNotify();
+
+//         SerialPortReader reader = SerialPortReader(_desktopPort!, timeout: 10);
+//         reader.stream.listen(
+//           (Uint8List data) {
+//             _processMavlinkBytes(data);
+//           },
+//           onError: (err) {
+//             debugPrint("Serial Stream Error: $err");
+//           },
+//         );
+//         return true;
+//       } else {
+//         debugPrint("Failed to open port: ${SerialPort.lastError}");
+//       }
+//     } catch (e) {
+//       debugPrint("Desktop Serial Error: $e");
+//     }
+//     return false;
+//   }
+
+//   Future<bool> _tryConnectAndroidUsb(UsbDevice device, int baud) async {
+//     try {
+//       _usbPort = await device.create();
+//       bool openResult = await _usbPort!.open();
+
+//       if (openResult) {
+//         _udpSocket?.close();
+//         _udpSocket = null;
+
+//         await Future.delayed(const Duration(milliseconds: 200));
+
+//         await _usbPort!.setPortParameters(
+//           baud,
+//           UsbPort.DATABITS_8,
+//           UsbPort.STOPBITS_1,
+//           UsbPort.PARITY_NONE,
+//         );
+
+//         await Future.delayed(const Duration(milliseconds: 50));
+
+//         await _usbPort!.setDTR(true);
+//         await _usbPort!.setRTS(true);
+
+//         connectionStatus = 'MK32 USB: $baud BAUD';
+//         statusColor = AppTheme.green;
+
+//         _safeNotify();
+
+//         _usbPort!.inputStream!.listen((Uint8List data) {
+//           _processMavlinkBytes(data);
+//         });
+//         return true;
+//       }
+//       // air unit
+//       else{
+//         debugPrint("USB Port failed to open. Permission denied or device busy.");
+//         connectionStatus = 'USB PORT FAILED/BUSY';
+//         statusColor = AppTheme.red;
+//         _safeNotify();
+//       }
+//     } catch (e) {
+//       debugPrint("USB Serial Error: $e");
+//     }
+//     return false;
+//   }
+
+//   // void _processMavlinkBytes(Uint8List data) {
+//   //   debugPrint("RAW BYTES RECEIVED: ${data.length} -> $data");
+//   //   _buffer.addAll(data);
+
+//   //   while (_buffer.isNotEmpty) {
+//   //     int magic = _buffer[0];
+
+//   //     if (magic != 0xFD && magic != 0xFE) {
+//   //       _buffer.removeAt(0);
+//   //       continue;
+//   //     }
+
+//   //     if (magic == 0xFE) {
+//   //       if (_buffer.length < 6) break;
+//   //       int payloadLen = _buffer[1];
+//   //       int frameLen = 8 + payloadLen;
+
+//   //       if (frameLen > 280) {
+//   //         _buffer.removeAt(0);
+//   //         continue;
+//   //       }
+//   //       if (_buffer.length < frameLen) break;
+
+//   //       int msgId = _buffer[5];
+//   //       if (msgId == 251) {
+//   //         try {
+//   //           _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
+//   //         } catch (e) {
+//   //           debugPrint("MAVLink v1 Parse Error: $e");
+//   //         }
+//   //       }
+//   //       _buffer.removeRange(0, frameLen);
+//   //     } else if (magic == 0xFD) {
+//   //       if (_buffer.length < 10) break;
+//   //       int payloadLen = _buffer[1];
+//   //       int incompatFlags = _buffer[2];
+//   //       bool hasSignature = (incompatFlags & 0x01) != 0;
+//   //       int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
+
+//   //       if (frameLen > 280) {
+//   //         _buffer.removeAt(0);
+//   //         continue;
+//   //       }
+//   //       if (_buffer.length < frameLen) break;
+
+//   //       int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
+//   //       if (msgId == 251) {
+//   //         try {
+//   //           _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
+//   //         } catch (e) {
+//   //           debugPrint("MAVLink v2 Parse Error: $e");
+//   //         }
+//   //       }
+//   //       _buffer.removeRange(0, frameLen);
+//   //     }
+//   //   }
+//   // }
+
+//   Future<void> _startAirUnitUdp() async {
+//     connectionStatus = 'SEARCHING UDP...';
+//     statusColor = AppTheme.amber;
+//     _safeNotify();
+
+//     try {
+//       // 👉 Restored physical robot port 14550
+//       _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 14550);
+//       _udpSocket!.listen((RawSocketEvent event) {
+//         if (event == RawSocketEvent.read) {
+//           Datagram? dg = _udpSocket!.receive();
+//           if (dg != null) {
+//             if (!connectionStatus.contains('AIR UNIT')) {
+//               connectionStatus = 'AIR UNIT LINKED';
+//               statusColor = AppTheme.cyan;
+//               _safeNotify();
+//             }
+//             // 👉 Routes binary data to the real MAVLink parser
+//             _processMavlinkBytes(dg.data); 
+//           }
+//         }
+//       });
+//     } catch (e) {
+//       connectionStatus = 'UDP PORT BUSY';
+//       statusColor = AppTheme.red;
+//       _safeNotify();
+//     }
+//   }
+//     void _processMavlinkBytes(Uint8List data) {
+//     _buffer.addAll(data);
+
+//     while (_buffer.isNotEmpty) {
+//       int magic = _buffer[0];
+
+//       // Discard non-MAVLink bytes one by one
+//       if (magic != 0xFD && magic != 0xFE) {
+//         _buffer.removeAt(0);
+//         continue;
+//       }
+
+//       // ── MAVLink v1.0 Header ──
+//       if (magic == 0xFE) {
+//         if (_buffer.length < 6) break;
+//         int payloadLen = _buffer[1];
+//         int frameLen = 8 + payloadLen;
+
+//         if (frameLen > 280) {
+//           _buffer.removeAt(0);
+//           continue;
+//         }
+//         if (_buffer.length < frameLen) break;
+
+//         int msgId = _buffer[5];
+//         if (msgId == 251) {
+//           try {
+//             _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
+//           } catch (e) {
+//             debugPrint("MAVLink v1 Parse Error: $e");
+//           }
+//           _buffer.removeRange(0, frameLen);
+//         } else if (msgId == 0) {
+//           // Heartbeat
+//           _lastDataTime = DateTime.now();
+//           if (!isConnected) isConnected = true;
+//           _buffer.removeRange(0, frameLen);
+//         } else {
+//           // 👉 FIX 1: Safely skip the entire unrecognized packet
+//           _buffer.removeRange(0, frameLen);
+//         }
+//       }
+//       // ── MAVLink v2.0 Header ──
+//       else if (magic == 0xFD) {
+//         if (_buffer.length < 10) break;
+//         int payloadLen = _buffer[1];
+//         int incompatFlags = _buffer[2];
+//         bool hasSignature = (incompatFlags & 0x01) != 0;
+//         int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
+
+//         if (frameLen > 280) {
+//           _buffer.removeAt(0);
+//           continue;
+//         }
+//         if (_buffer.length < frameLen) break;
+
+//         int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
+//         if (msgId == 251) {
+//           try {
+//             _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
+//           } catch (e) {
+//             debugPrint("MAVLink v2 Parse Error: $e");
+//           }
+//           _buffer.removeRange(0, frameLen);
+//         } else if (msgId == 0) {
+//           // Heartbeat
+//           _lastDataTime = DateTime.now();
+//           if (!isConnected) isConnected = true;
+//           _buffer.removeRange(0, frameLen);
+//         } else {
+//           // 👉 FIX 2: Safely skip the entire unrecognized packet
+//           _buffer.removeRange(0, frameLen);
+//         }
+//       }
+//     }
+//   }
+  
+//   // void _processMavlinkBytes(Uint8List data) {
+//   //   _buffer.addAll(data);
+
+//   //   while (_buffer.isNotEmpty) {
+//   //     int magic = _buffer[0];
+
+//   //     // Discard non-MAVLink bytes one by one
+//   //     if (magic != 0xFD && magic != 0xFE) {
+//   //       _buffer.removeAt(0);
+//   //       continue;
+//   //     }
+
+//   //     // ── MAVLink v1.0 Header ──
+//   //     if (magic == 0xFE) {
+//   //       if (_buffer.length < 6) break;
+//   //       int payloadLen = _buffer[1];
+//   //       int frameLen = 8 + payloadLen;
+
+//   //       if (frameLen > 280) {
+//   //         _buffer.removeAt(0);
+//   //         continue;
+//   //       }
+//   //       if (_buffer.length < frameLen) break;
+
+//   //       int msgId = _buffer[5];
+//   //       if (msgId == 251) {
+//   //         try {
+//   //           _parseNamedValueFloat(_buffer.sublist(6, 6 + payloadLen));
+//   //         } catch (e) {
+//   //           debugPrint("MAVLink v1 Parse Error: $e");
+//   //         }
+//   //         _buffer.removeRange(0, frameLen);
+//   //       } else if (msgId == 0) {
+//   //         // Heartbeat
+//   //         _lastDataTime = DateTime.now();
+//   //         if (!isConnected) isConnected = true;
+//   //         _buffer.removeRange(0, frameLen);
+//   //       } else {
+//   //         _buffer.removeAt(0);
+//   //       }
+//   //     }
+//   //     // ── MAVLink v2.0 Header ──
+//   //     else if (magic == 0xFD) {
+//   //       if (_buffer.length < 10) break;
+//   //       int payloadLen = _buffer[1];
+//   //       int incompatFlags = _buffer[2];
+//   //       bool hasSignature = (incompatFlags & 0x01) != 0;
+//   //       int frameLen = 12 + payloadLen + (hasSignature ? 13 : 0);
+
+//   //       if (frameLen > 280) {
+//   //         _buffer.removeAt(0);
+//   //         continue;
+//   //       }
+//   //       if (_buffer.length < frameLen) break;
+
+//   //       int msgId = _buffer[7] | (_buffer[8] << 8) | (_buffer[9] << 16);
+//   //       if (msgId == 251) {
+//   //         try {
+//   //           _parseNamedValueFloat(_buffer.sublist(10, 10 + payloadLen));
+//   //         } catch (e) {
+//   //           debugPrint("MAVLink v2 Parse Error: $e");
+//   //         }
+//   //         _buffer.removeRange(0, frameLen);
+//   //       } else if (msgId == 0) {
+//   //         // Heartbeat
+//   //         _lastDataTime = DateTime.now();
+//   //         if (!isConnected) isConnected = true;
+//   //         _buffer.removeRange(0, frameLen);
+//   //       } else {
+//   //         _buffer.removeAt(0);
+//   //       }
+//   //     }
+//   //   }
+//   // }
+
+//   void _parseNamedValueFloat(List<int> payload) {
+//     List<int> paddedPayload = List<int>.from(payload);
+//     while (paddedPayload.length < 18) {
+//       paddedPayload.add(0);
+//     }
+
+//     ByteData bd = ByteData.view(Uint8List.fromList(paddedPayload).buffer);
+//     double value = bd.getFloat32(4, Endian.little);
+
+//     String name = String.fromCharCodes(
+//       paddedPayload.sublist(8, 18),
+//     ).replaceAll('\x00', '').trim();
+// // print values in terminal for debugging
+//     debugPrint("MAVLINK NVF -> name: '$name' | value: $value"); 
+
+//     _lastDataTime = DateTime.now();
+//     if (!isConnected)
+//     {
+//        isConnected = true;
+//        onAirUnitLinked?.call();
+//     }
+
+//     // pop up msg for air unit linked
+    
+
+//     switch (name) {
+//       case 'STAB_FLT':
+//         stabFault = value > 0.5;
+//         break;
+//       case 'STAB_LATCH':
+//         stabLatched = value > 0.5;
+//         break;
+//       case 'CHMBR_A_PA':
+//       case 'CHAMB_A':
+//         chamberA = value.toInt();
+//         break;
+//       case 'CHMBR_B_PA':
+//       case 'CHAMB_B':
+//         chamberB = value.toInt();
+//         break;
+//       case 'THRUST_1':
+//       case 'THRST_1':
+//         thrusterDc1 = value.toInt();
+//         break;
+//       case 'THRUST_2':
+//       case 'THRST_2':
+//         thrusterDc2 = value.toInt();
+//         break;
+//       case 'IMPEL_1':
+//         impellerDc1 = value.toInt();
+//         break;
+//       case 'IMPEL_2':
+//         impellerDc2 = value.toInt();
+//         break;
+//       case 'MOTN_FLT':
+//         motionFault = value > 0.5;
+//         break;
+//       case 'MOTION':
+//       case 'MOTN_ACTV':
+//         inMotion = value > 0.5;
+//         break;
+//       case 'CLIMB_MS':
+//       case 'CLIMB_SPD':
+//         climbSpeed = value.toInt();
+//         break;
+//       case 'ALTITUDE':
+//       case 'ALT':
+//         altitude = value.toInt();
+//         break;
+//       case 'CAPSTAN':
+//       case 'CAPSTN_FLT':
+//         capstanFault = value < 0.5;
+//         break;
+//       case 'RC_FLT':
+//         rcFault = value > 0.5;
+//         break;
+//       case 'RC_CONN':
+//         rcConnected = value > 0.5;
+//         break;
+//       case 'PWR_FLT':
+//         powerFault = value > 0.5;
+//         break;
+//       case 'PWR_AC':
+//         acSupply = value > 0.5;
+//         break;
+//       case 'BUS_48_FLT':
+//         bus48vFault = value > 0.5;
+//         break;
+//       case 'BUS_24_FLT':
+//         bus24vFault = value > 0.5;
+//         break;
+//       case 'BUS_12_FLT':
+//         bus12vFault = value > 0.5;
+//         break;
+//       case 'BUS_8_FLT':
+//         bus8vFault = value > 0.5;
+//         break;
+//       case 'BATT_V':
+//         batteryPct = (((value - 10.5) / 2.1) * 100).clamp(0, 100).toInt();
+//         break;
+//       case 'BATT_PCT':
+//         batteryPct = value.toInt();
+//         break;
+//       case 'BRUSH_1':
+//         brush1 = value > 0.5;
+//         break;
+//       case 'BRUSH_2':
+//         brush2 = value > 0.5;
+//         break;
+//       case 'WIPER_1':
+//         wiper1 = value > 0.5;
+//         break;
+//       case 'WIPER_2':
+//         wiper2 = value > 0.5;
+//         break;
+//       case 'PUMP':
+//         pump = value > 0.5;
+//         break;
+//       case 'PUMP_LPM':
+//         pumpLpm = value;
+//         break;
+//       case 'PUMP_DUTY':
+//         pumpDuty = value.toInt();
+//         break;
+        
+//       case 'WATER_LVL':
+//         waterLvl = value;
+//         break;
+//         //water tank
+//       case 'TANK_VOL':
+//       case 'TANK_VOLUME':
+//       case 'WATER_VOLUME':
+//         tankVol = value;
+//         break;
+
+
+//       case 'WATER_USD':
+//         waterUsed = value;
+//         break;
+//       case 'ENERGY_KWH':
+//         energyConsumed = value;
+//         break;
+//       case 'AREA_SQFT':
+//         areaCleaned = value;
+//         break;
+//     }
+//     _safeNotify();
+//   }
+
+//   void _safeNotify() {
+//     if (!_isDisposed) notifyListeners();
+//   }
+
+//   void _simulateData() {
+//     robotX += 0.5;
+//     if (robotX > 100) {
+//       robotX = 0;
+//       robotY += 5;
+//     }
+
+//     batteryLevel -= 0.1;
+//     waterLevel -= 0.2;
+
+//     notifyListeners();
+//   }
+// }
+
+// // ═════════════════════════════════════════════════════════════════════════════
+// // TACTICAL DASHBOARD UI 
+// // ═════════════════════════════════════════════════════════════════════════════
+// class TelemetrySection extends StatelessWidget {
+//   final Task task;
+//   final bool isWide;
+//   final WiperTelemetry telemetry;
+//   // water tank
+//   final double currentTankVolume;
+//   final double maxTankVolume;
+//   final VoidCallback onRefillTap;
+
+//   const TelemetrySection({
+//     super.key,
+//     required this.task,
+//     required this.isWide,
+//     required this.telemetry,
+//     // water tank
+//     required this.currentTankVolume,
+//     required this.maxTankVolume,
+//     required this.onRefillTap,
+//   });
+
+//   String _formatCompact(int val) {
+//     String s = val.toString();
+//     if (s.length > 4) {
+//       if (val > 9999) return '${val ~/ 1000}k';
+//       if (val < -999) return '${val ~/ 1000}k';
+//     }
+//     return s;
+//   }
+
+//   Widget _buildGroupBox(Widget child) {
+//     return Container(
+//       width: double.infinity,
+//       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+//       decoration: BoxDecoration(
+//         color: AppTheme.bgCard,
+//         borderRadius: BorderRadius.circular(8),
+//         border: Border.all(color: AppTheme.borderDim),
+//       ),
+//       child: child,
+//     );
+//   }
+
+//   Widget _buildGroupHeader(
+//     String title,
+//     bool isConnected,
+//     bool? isFault,
+//     String? badgeLabel,
+//     Color? badgeColor,
+//   ) {
+//     Color headerColor = AppTheme.textMid;
+//     if (isConnected) {
+//       if (isFault == null) {
+//         headerColor = AppTheme.cyan;
+//       } else {
+//         headerColor = isFault ? AppTheme.red : AppTheme.green;
+//       }
+//     }
+
+//     return Padding(
+//       padding: const EdgeInsets.only(top: 2, bottom: 3),
+//       child: Row(
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           Text(
+//             title.toUpperCase(),
+//             style: GoogleFonts.jetBrainsMono(
+//               fontSize: 10,
+//               fontWeight: FontWeight.w800,
+//               color: headerColor,
+//               letterSpacing: 0.5,
+//             ),
+//           ),
+//           if (badgeLabel != null && badgeColor != null) ...[
+//             const SizedBox(width: 8),
+//             StatusBadge(label: badgeLabel, color: badgeColor),
+//           ],
+//         ],
+//       ),
+//     );
+//   }
+
+//   Widget _buildPowerGroup(WiperTelemetry t) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader(
+//           'Power System',
+//           t.isConnected,
+//           t.powerFault,
+//           t.acSupply ? 'AC SUPPLY' : 'BATTERY',
+//           t.acSupply ? AppTheme.cyan : AppTheme.amber,
+//         ),
+//         _buildGroupBox(
+//           Wrap(
+//             spacing: 12,
+//             runSpacing: 10,
+//             children: [
+//               InnerStatusTile(
+//                 label: '48V BUS',
+//                 status: t.bus48vFault ? 'FAULT' : 'OK',
+//                 icon: Icons.electrical_services_rounded,
+//                 color: t.bus48vFault ? AppTheme.red : AppTheme.green,
+//               ),
+//               InnerStatusTile(
+//                 label: '24V BUS',
+//                 status: t.bus24vFault ? 'FAULT' : 'OK',
+//                 icon: Icons.electrical_services_rounded,
+//                 color: t.bus24vFault ? AppTheme.red : AppTheme.green,
+//               ),
+//               InnerStatusTile(
+//                 label: '12V BUS',
+//                 status: t.bus12vFault ? 'FAULT' : 'OK',
+//                 icon: Icons.electrical_services_rounded,
+//                 color: t.bus12vFault ? AppTheme.red : AppTheme.green,
+//               ),
+//               InnerStatusTile(
+//                 label: '8V BUS',
+//                 status: t.bus8vFault ? 'FAULT' : 'OK',
+//                 icon: Icons.electrical_services_rounded,
+//                 color: t.bus8vFault ? AppTheme.red : AppTheme.green,
+//               ),
+//               InnerTeleTile(
+//                 label: 'BATTERY',
+//                 value: '${t.batteryPct}',
+//                 unit: '%',
+//                 icon: Icons.battery_charging_full_rounded,
+//                 color: t.batteryPct < 20 ? AppTheme.red : AppTheme.green,
+//               ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildAlertsGroup(Task task, WiperTelemetry t) {
+//     final hasAlerts = task.alerts.isNotEmpty;
+//     final latestAlert = hasAlerts ? task.alerts.last : null;
+//     final isCritical = latestAlert?.type == 'CRITICAL';
+
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader(
+//           'System Alerts',
+//           t.isConnected,
+//           hasAlerts ? true : false,
+//           hasAlerts ? 'ACTIVE' : 'CLEAR',
+//           hasAlerts
+//               ? (isCritical ? AppTheme.red : AppTheme.amber)
+//               : AppTheme.green,
+//         ),
+//         _buildGroupBox(
+//           Container(
+//             width: double.infinity,
+//             constraints: const BoxConstraints(minHeight: 70),
+//             child: hasAlerts
+//                 ? Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     mainAxisAlignment: MainAxisAlignment.center,
+//                     children: [
+//                       Row(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           Icon(
+//                             isCritical
+//                                 ? Icons.warning_rounded
+//                                 : Icons.info_outline,
+//                             color: isCritical ? AppTheme.red : AppTheme.amber,
+//                             size: 16,
+//                           ),
+//                           const SizedBox(width: 8),
+//                           Expanded(
+//                             child: Text(
+//                               latestAlert!.message ?? 'Unknown Alert',
+//                               style: GoogleFonts.jetBrainsMono(
+//                                 color: AppTheme.textHi,
+//                                 fontSize: 11,
+//                                 fontWeight: FontWeight.bold,
+//                               ),
+//                               maxLines: 2,
+//                               overflow: TextOverflow.ellipsis,
+//                             ),
+//                           ),
+//                         ],
+//                       ),
+//                       const SizedBox(height: 8),
+//                       Text(
+//                         'TIME: ${latestAlert.timestamp.toString().split('.')[0]}',
+//                         style: GoogleFonts.jetBrainsMono(
+//                           color: AppTheme.textLo,
+//                           fontSize: 9,
+//                         ),
+//                       ),
+//                     ],
+//                   )
+//                 : Center(
+//                     child: Text(
+//                       'NO ACTIVE ALERTS',
+//                       style: GoogleFonts.jetBrainsMono(
+//                         color: AppTheme.textLo,
+//                         fontSize: 11,
+//                         fontWeight: FontWeight.w600,
+//                         letterSpacing: 1.0,
+//                       ),
+//                     ),
+//                   ),
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildStabGroup(WiperTelemetry t) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader(
+//           'Stabilization System',
+//           t.isConnected,
+//           t.stabFault,
+//           t.stabLatched ? 'LATCHED' : 'UNLATCHED',
+//           t.stabLatched ? AppTheme.green : AppTheme.amber,
+//         ),
+//         _buildGroupBox(
+//           Wrap(
+//             spacing: 12,
+//             runSpacing: 10,
+//             children: [
+//               InnerTeleTile(
+//                 label: 'CHAMBER A',
+//                 value: _formatCompact(t.chamberA),
+//                 unit: 'HPa',
+//                 icon: Icons.compress_rounded,
+//                 color: AppTheme.cyan,
+//               ),
+//               InnerTeleTile(
+//                 label: 'CHAMBER B',
+//                 value: _formatCompact(t.chamberB),
+//                 unit: 'HPa',
+//                 icon: Icons.compress_rounded,
+//                 color: AppTheme.cyan,
+//               ),
+//               InnerTeleTile(
+//                 label: 'THRUST 1',
+//                 value: _formatCompact(t.thrusterDc1),
+//                 unit: 'RPM',
+//                 icon: Icons.cyclone_rounded,
+//                 color: AppTheme.textMid,
+//               ),
+//               InnerTeleTile(
+//                 label: 'THRUST 2',
+//                 value: _formatCompact(t.thrusterDc2),
+//                 unit: 'RPM',
+//                 icon: Icons.cyclone_rounded,
+//                 color: AppTheme.textMid,
+//               ),
+//               InnerTeleTile(
+//                 label: 'IMPEL 1',
+//                 value: _formatCompact(t.impellerDc1),
+//                 unit: 'RPM',
+//                 icon: Icons.heat_pump,
+//                 color: AppTheme.textMid,
+//               ),
+//               InnerTeleTile(
+//                 label: 'IMPEL 2',
+//                 value: _formatCompact(t.impellerDc2),
+//                 unit: 'RPM',
+//                 icon: Icons.heat_pump,
+//                 color: AppTheme.textMid,
+//               ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildMotionGroup(WiperTelemetry t) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader(
+//           'Motion Control',
+//           t.isConnected,
+//           t.motionFault,
+//           t.inMotion ? 'IN MOTION' : 'IDLE',
+//           t.inMotion ? AppTheme.cyan : AppTheme.textHi,
+//         ),
+//         _buildGroupBox(
+//           Row(
+//             children: [
+//               InnerTeleTile(
+//                 label: 'CLIMB SPD',
+//                 value: '${t.climbSpeed}',
+//                 unit: 'm/m',
+//                 icon: Icons.speed_rounded,
+//                 color: AppTheme.cyan,
+//               ),
+//               const SizedBox(width: 12),
+//               InnerTeleTile(
+//                 label: 'Altitude',
+//                 value: '${t.altitude}',
+//                 unit: 'meters',
+//                 icon: Icons.speed_rounded,
+//                 color: AppTheme.cyan,
+//               ),
+//               const Spacer(),
+//               InnerStatusTile(
+//                 label: 'CAPSTAN',
+//                 status: t.capstanFault ? 'FAULT' : 'OK',
+//                 icon: Icons.settings_rounded,
+//                 color: t.capstanFault ? AppTheme.red : AppTheme.green,
+//               ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildRcGroup(WiperTelemetry t) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader(
+//           'Remote Control',
+//           t.isConnected,
+//           t.rcFault,
+//           null,
+//           null,
+//         ),
+//         _buildGroupBox(
+//           Wrap(
+//             spacing: 12,
+//             runSpacing: 10,
+//             children: [
+//               InnerStatusTile(
+//                 label: 'RC LINK',
+//                 status: t.rcConnected ? 'CONN' : 'DISC',
+//                 icon: Icons.settings_remote_rounded,
+//                 color: t.rcConnected ? AppTheme.green : AppTheme.textLo,
+//               ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildCleaningGroup(WiperTelemetry t) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         _buildGroupHeader('Cleaning Subs', t.isConnected, null, null, null),
+//         _buildGroupBox(
+//           Wrap(
+//             spacing: 12,
+//             runSpacing: 10,
+//             children: [
+//               InnerStatusTile(
+//                 label: 'BRUSH 1',
+//                 status: t.brush1 ? 'RUN' : 'OFF',
+//                 icon: Icons.change_circle_outlined,
+//                 color: t.brush1 ? AppTheme.cyan : AppTheme.textHi,
+//               ),
+//               InnerStatusTile(
+//                 label: 'BRUSH 2',
+//                 status: t.brush2 ? 'RUN' : 'OFF',
+//                 icon: Icons.change_circle_outlined,
+//                 color: t.brush2 ? AppTheme.cyan : AppTheme.textHi,
+//               ),
+//               InnerStatusTile(
+//                 label: 'WIPER 1',
+//                 status: t.wiper1 ? 'ENG' : 'OFF',
+//                 icon: Icons.cleaning_services_rounded,
+//                 color: t.wiper1 ? AppTheme.green : AppTheme.textHi,
+//               ),
+//               InnerStatusTile(
+//                 label: 'WIPER 2',
+//                 status: t.wiper2 ? 'ENG' : 'OFF',
+//                 icon: Icons.cleaning_services_rounded,
+//                 color: t.wiper2 ? AppTheme.green : AppTheme.textHi,
+//               ),
+//               InnerStatusTile(
+//                 label: 'PUMP',
+//                 status: t.pump ? 'ON' : 'OFF',
+//                 icon: Icons.water_rounded,
+//                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
+//               ),
+//               InnerTeleTile(
+//                 label: 'PUMP FLOW',
+//                 value: !t.isConnected ? '---' : '${t.pumpLpm.toStringAsFixed(1)}',
+//                 unit: '%',
+//                 icon: Icons.waves_rounded,
+//                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
+//               ),
+//               InnerTeleTile(
+//                 label: 'PUMP DUTY',
+//                 value: !t.isConnected ? '---' : '${t.pumpLpm.toStringAsFixed(1)}',
+//                 unit: '%',
+//                 icon: Icons.waves_rounded,
+//                 color: t.pump ? AppTheme.cyan : AppTheme.textHi,
+//               ),
+//               // water tank
+//               GestureDetector(
+//                 onTap: onRefillTap,
+//                 behavior: HitTestBehavior.opaque,
+//                 child: InnerTeleTile(
+//                   label: 'TANK (EDIT)',
+//                   value: currentTankVolume.toStringAsFixed(1),
+//                   unit: 'L',
+//                   icon: Icons.edit_rounded,
+//                   color: (currentTankVolume / maxTankVolume) < 0.15 ? AppTheme.red : AppTheme.cyan,
+//                 ),
+//               ),
+//               InnerTeleTile(
+//                 label: 'WATER LVL',
+//                 value: t.waterLvl.toStringAsFixed(0),
+//                 unit: '%',
+//                 icon: Icons.water_drop_rounded,
+//                 color: t.waterLvl < 20 ? AppTheme.red : AppTheme.cyan,
+//               ),
+//               // GestureDetector(                           
+//               //   onTap: onRefillTap,
+//               //   behavior: HitTestBehavior.opaque,
+//               //   child: InnerTeleTile(
+//               //     label: 'TANK (EDIT)',
+//               //     value: currentTankVolume.toStringAsFixed(1),
+//               //     unit: 'L',
+//               //     icon: Icons.edit_rounded,
+//               //     color: (currentTankVolume / maxTankVolume) < 0.15 ? AppTheme.red : AppTheme.cyan,
+//               //   ),
+//               // ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final pad = AppTheme.screenPad(context);
+
+//     return AnimatedBuilder(
+//       animation: telemetry,
+//       builder: (context, _) {
+//         final t = telemetry;
+
+//         return SingleChildScrollView(
+//           padding: EdgeInsets.symmetric(horizontal: pad, vertical: 8),
+//           child: Column(
+//             crossAxisAlignment: CrossAxisAlignment.start,
+//             children: [
+//               Row(
+//                 mainAxisAlignment: MainAxisAlignment.end,
+//                 children: [
+//                   StatusBadge(
+//                     label: 'LINK: ${t.connectionStatus}',
+//                     color: t.statusColor,
+//                   ),
+//                 ],
+//               ),
+//               const SizedBox(height: 4),
+
+//               Row(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   Expanded(child: _buildPowerGroup(t)),
+//                   const SizedBox(width: 10),
+//                   Expanded(child: _buildAlertsGroup(task, t)),
+//                 ],
+//               ),
+//               const SizedBox(height: 10),
+
+//               Row(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   Expanded(
+//                     child: Column(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       children: [
+//                         _buildStabGroup(t),
+//                         const SizedBox(height: 4),
+//                         _buildCleaningGroup(t),
+//                       ],
+//                     ),
+//                   ),
+//                   const SizedBox(width: 10),
+//                   Expanded(
+//                     child: Column(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       children: [
+//                         _buildMotionGroup(t),
+//                         const SizedBox(height: 10),
+//                         _buildRcGroup(t),
+//                       ],
+//                     ),
+//                   ),
+//                 ],
+//               ),
+//               const SizedBox(height: 24),
+//             ],
+//           ),
+//         );
+//       },
+//     );
+//   }
+// }
+
+// // ═════════════════════════════════════════════════════════════════════════════
+// // INNER TILES
+// // ═════════════════════════════════════════════════════════════════════════════
+// class InnerTeleTile extends StatelessWidget {
+//   final String label, value, unit;
+//   final IconData icon;
+//   final Color color;
+
+//   const InnerTeleTile({
+//     super.key,
+//     required this.label,
+//     required this.value,
+//     required this.unit,
+//     required this.icon,
+//     required this.color,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       mainAxisSize: MainAxisSize.min,
+//       children: [
+//         Row(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Icon(icon, size: 9, color: color),
+//             const SizedBox(width: 4),
+//             Text(
+//               label,
+//               style: GoogleFonts.jetBrainsMono(
+//                 fontSize: 8,
+//                 color: AppTheme.textHi,
+//                 letterSpacing: 0.5,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ],
+//         ),
+//         const SizedBox(height: 2),
+//         GcsMonoValue(value: value, unit: unit, color: color, fontSize: 16),
+//       ],
+//     );
+//   }
+// }
+
+// class MicroTeleTile extends StatelessWidget {
+//   final String label, value, unit;
+//   final IconData icon;
+//   final Color color;
+
+//   const MicroTeleTile({
+//     super.key,
+//     required this.label,
+//     required this.value,
+//     required this.unit,
+//     required this.icon,
+//     required this.color,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+//       decoration: BoxDecoration(
+//         color: AppTheme.bgCard,
+//         borderRadius: BorderRadius.circular(6),
+//         border: Border.all(color: AppTheme.borderDim),
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           Row(
+//             mainAxisSize: MainAxisSize.min,
+//             children: [
+//               Icon(icon, size: 9, color: color),
+//               const SizedBox(width: 4),
+//               Text(
+//                 label,
+//                 style: GoogleFonts.jetBrainsMono(
+//                   fontSize: 8,
+//                   color: AppTheme.textHi,
+//                   letterSpacing: 0.5,
+//                 ),
+//               ),
+//             ],
+//           ),
+//           const SizedBox(height: 2),
+//           GcsMonoValue(value: value, unit: unit, color: color, fontSize: 16),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// class InnerStatusTile extends StatelessWidget {
+//   final String label, status;
+//   final IconData icon;
+//   final Color color;
+
+//   const InnerStatusTile({
+//     super.key,
+//     required this.label,
+//     required this.status,
+//     required this.icon,
+//     required this.color,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       mainAxisSize: MainAxisSize.min,
+//       children: [
+//         Row(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Icon(icon, size: 9, color: color),
+//             const SizedBox(width: 4),
+//             Text(
+//               label,
+//               style: GoogleFonts.jetBrainsMono(
+//                 fontSize: 8,
+//                 color: AppTheme.textHi,
+//                 letterSpacing: 0.5,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ],
+//         ),
+//         const SizedBox(height: 2),
+//         Text(
+//           status,
+//           style: GoogleFonts.barlowCondensed(
+//             fontSize: 16,
+//             fontWeight: FontWeight.w700,
+//             color: color,
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+// }
 
 
